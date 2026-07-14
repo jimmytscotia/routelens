@@ -324,3 +324,50 @@ def test_rpki_scoreboard_empty_state(tmp_path):
     body = client.get("/partials/dashboards/rpki").data.decode()
 
     assert "no rpki scores yet" in body.lower()
+
+
+def test_table_growth_page_and_partial(tmp_path):
+    app = _app(tmp_path)
+
+    class FakeSources:
+        def table_growth(self, **kwargs):
+            return {
+                "ok": True,
+                "data": {
+                    "current_v4": 1064633, "current_v6": 256115,
+                    "week_delta_v4": 1200, "year_delta_v4": 42000,
+                    "week_delta_v6": 300, "year_delta_v6": 21000,
+                    "v4": [["2025-07-01", 1022000], ["2026-07-14", 1064633]],
+                    "v6": [["2025-07-01", 235000], ["2026-07-14", 256115]],
+                },
+            }
+
+    app.config["ROUTELENS_SOURCES"] = FakeSources()
+    client = app.test_client()
+
+    page = client.get("/dashboards/table-growth")
+    assert page.status_code == 200
+    assert b"Table growth" in page.data or b"table growth" in page.data
+
+    body = client.get("/partials/dashboards/table-growth").data.decode()
+    assert "1,064,633" in body
+    assert "256,115" in body
+    # Charts are server-rendered SVG polylines.
+    assert body.count("<svg") >= 2
+    assert "polyline" in body
+    # Deltas shown.
+    assert "42,000" in body
+
+
+def test_table_growth_partial_degrades_on_error(tmp_path):
+    app = _app(tmp_path)
+
+    class FakeSources:
+        def table_growth(self, **kwargs):
+            return {"ok": False, "error": "potaroo unreachable"}
+
+    app.config["ROUTELENS_SOURCES"] = FakeSources()
+
+    body = app.test_client().get("/partials/dashboards/table-growth").data.decode()
+
+    assert "potaroo unreachable" in body

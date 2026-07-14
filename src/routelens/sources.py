@@ -35,6 +35,38 @@ def parse_asn_csv(text: str) -> list[tuple[int, str, str]]:
     return rows
 
 
+POTAROO_V4 = "https://bgp.potaroo.net/as2.0/bgp-active.txt"
+POTAROO_V6 = "https://bgp.potaroo.net/v6/as2.0/bgp-active.txt"
+
+
+def parse_potaroo(text: str) -> list[tuple[int, int]]:
+    """Parse potaroo bgp-active.txt: one 'unix_ts count' pair per line."""
+    points = []
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+            points.append((int(parts[0]), int(parts[1])))
+    return points
+
+
+def downsample_series(points: list[tuple[int, int]], *, now_ts: float) -> list[tuple[str, int]]:
+    """Compact a decades-long series for charting: daily samples for the last
+    year (last value per day), month-start samples before that."""
+    from datetime import datetime, timezone
+
+    year_ago = now_ts - 365 * 86400
+    daily: dict[str, int] = {}
+    monthly: dict[str, int] = {}
+    for ts, count in points:
+        date = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+        if ts >= year_ago:
+            daily[date] = count
+        else:
+            monthly.setdefault(date[:8] + "01", count)
+    merged = {**monthly, **daily}
+    return sorted(merged.items())
+
+
 def summarize_rpki_asn(payload: dict, asn: int) -> dict[str, int]:
     """Count validity states in a RouteViews /guest/rpki?asn= response.
     States other than valid/invalid (notfound, unknown) mean no covering ROA."""
@@ -302,6 +334,49 @@ class SourceClient:
                 }
             )
         return {"ok": True, "data": {"status": payload.get("status"), "probes": probes}}
+
+    # ---- Global table growth (potaroo) -------------------------------------
+
+    def table_growth(self, *, now_ts: float | None = None) -> dict[str, Any]:
+        """Global routing-table size history, v4 + v6, cached for a day.
+        Sourced from Geoff Huston's bgp.potaroo.net (updated daily)."""
+        import time as _time
+
+        now = now_ts if now_ts is not None else _time.time()
+        cached = self.store.cache_get("table-growth", max_age_seconds=86400)
+        if cached is not None:
+            return {"ok": True, "data": cached, "cached": True}
+
+        def fetch(url: str) -> list[tuple[int, int]]:
+            response = requests.get(url, headers=self._headers(), timeout=90)
+            response.raise_for_status()
+            return parse_potaroo(response.text)
+
+        try:
+            v4_raw = fetch(POTAROO_V4)
+            v6_raw = fetch(POTAROO_V6)
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+        if not v4_raw or not v6_raw:
+            return {"ok": False, "error": "empty series from potaroo"}
+
+        def delta(points: list[tuple[int, int]], seconds: int) -> int:
+            cutoff = now - seconds
+            past = [c for ts, c in points if ts <= cutoff]
+            return points[-1][1] - past[-1] if past else 0
+
+        data = {
+            "current_v4": v4_raw[-1][1],
+            "current_v6": v6_raw[-1][1],
+            "week_delta_v4": delta(v4_raw, 7 * 86400),
+            "year_delta_v4": delta(v4_raw, 365 * 86400),
+            "week_delta_v6": delta(v6_raw, 7 * 86400),
+            "year_delta_v6": delta(v6_raw, 365 * 86400),
+            "v4": downsample_series(v4_raw, now_ts=now),
+            "v6": downsample_series(v6_raw, now_ts=now),
+        }
+        self.store.cache_set("table-growth", data)
+        return {"ok": True, "data": data, "cached": False}
 
     # ---- Cloudflare Radar -------------------------------------------------
 

@@ -20,6 +20,25 @@ def _sparkline_points(values: list[int], width: int = 120, height: int = 24) -> 
     )
 
 
+def _line_chart(series: list, width: int = 560, height: int = 150) -> dict | None:
+    """Scaled polyline + axis labels for a server-rendered SVG line chart."""
+    if len(series) < 2:
+        return None
+    values = [v for _, v in series]
+    lo, hi = min(values), max(values)
+    span = max(hi - lo, 1)
+    step = width / (len(series) - 1)
+    points = " ".join(
+        f"{i * step:.1f},{height - (v - lo) / span * (height - 6) - 3:.1f}"
+        for i, (_, v) in enumerate(series)
+    )
+    return {
+        "points": points, "width": width, "height": height,
+        "y_min": lo, "y_max": hi,
+        "x_first": series[0][0], "x_last": series[-1][0],
+    }
+
+
 def _default_resolver(hostname: str) -> list[str]:
     import dns.resolver
 
@@ -283,6 +302,21 @@ def create_app(config: dict | None = None) -> Flask:
     @app.get("/partials/dashboards/rpki-global")
     def partial_dashboard_rpki_global():
         return render_template("partials/rpki_global.html", result=sources().radar_route_stats())
+
+    @app.get("/dashboards/table-growth")
+    def dashboard_table_growth():
+        return render_template("dashboards/table_growth.html")
+
+    @app.get("/partials/dashboards/table-growth")
+    def partial_dashboard_table_growth():
+        result = sources().table_growth()
+        charts = None
+        if result["ok"]:
+            charts = {
+                "v4": _line_chart(result["data"]["v4"]),
+                "v6": _line_chart(result["data"]["v6"]),
+            }
+        return render_template("partials/table_growth.html", result=result, charts=charts)
 
     @app.post("/api/globalping")
     def api_globalping_create():

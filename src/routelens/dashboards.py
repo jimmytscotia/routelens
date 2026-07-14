@@ -11,7 +11,7 @@ DASHBOARDS = [
     {"slug": "rpki", "title": "RPKI scoreboard", "status": "live"},
     {"slug": "address-space", "title": "Address space", "status": "planned"},
     {"slug": "asn-profiles", "title": "ASN profiles", "status": "planned"},
-    {"slug": "table-growth", "title": "Table growth", "status": "planned"},
+    {"slug": "table-growth", "title": "Table growth", "status": "live"},
     {"slug": "transit", "title": "Transit centrality", "status": "planned"},
     {"slug": "countries", "title": "Country instability", "status": "planned"},
 ]

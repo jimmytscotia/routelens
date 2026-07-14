@@ -1,0 +1,23 @@
+{% extends "dashboards/_layout.html" %}
+{% block title %}Table growth · RouteLens{% endblock %}
+{% block dashboard %}
+  <div class="pagehead" style="padding-top:0">
+    <h1>Global routing table growth</h1>
+    <p>The size of the full Internet routing table over time — the curve every network engineer
+       knows. Every prefix here is FIB space and convergence time on every default-free router
+       in the world. Data: Geoff Huston's bgp.potaroo.net, updated daily.</p>
+  </div>
+  <div id="tablegrowth"
+       hx-get="/partials/dashboards/table-growth"
+       hx-trigger="load"
+       hx-swap="innerHTML">
+    <section class="panel"><p class="loading">Loading… (first fetch of the day parses four decades of history — give it a few seconds)</p></section>
+  </div>
+<style>
+  .growthgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}
+  .chart polyline{stroke:var(--accent);stroke-width:1.5;fill:none}
+  .chart .axis{font-family:var(--mono);font-size:.625rem;fill:var(--faint)}
+  .deltas{display:flex;gap:16px;margin-top:8px;font-size:.75rem;color:var(--muted)}
+  .deltas b{font-family:var(--mono);color:var(--ink);font-weight:500}
+</style>
+{% endblock %}

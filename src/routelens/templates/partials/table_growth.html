@@ -1,0 +1,34 @@
+{% if result.ok %}
+{% set d = result.data %}
+<div class="growthgrid">
+  {% for fam, label in [('v4', 'IPv4'), ('v6', 'IPv6')] %}
+  {% set chart = charts[fam] %}
+  {% set current = d['current_' + fam] %}
+  <section class="panel">
+    <header class="phead">
+      <h2>{{ label }} · {{ "{:,}".format(current) }} routes</h2>
+      <span class="srctag">bgp.potaroo.net · daily</span>
+    </header>
+    {% if chart %}
+    <svg class="chart" width="100%" viewBox="0 0 {{ chart.width }} {{ chart.height + 18 }}"
+         role="img" aria-label="{{ label }} routing table size, {{ chart.x_first }} to {{ chart.x_last }}">
+      <polyline points="{{ chart.points }}"/>
+      <text class="axis" x="0" y="{{ chart.height + 13 }}">{{ chart.x_first }}</text>
+      <text class="axis" x="{{ chart.width }}" y="{{ chart.height + 13 }}" text-anchor="end">{{ chart.x_last }}</text>
+      <text class="axis" x="{{ chart.width }}" y="10" text-anchor="end">{{ "{:,}".format(chart.y_max) }}</text>
+    </svg>
+    {% endif %}
+    <div class="deltas">
+      <span title="Change over the last 7 days">1w <b>{{ '+' if d['week_delta_' + fam] >= 0 }}{{ "{:,}".format(d['week_delta_' + fam]) }}</b></span>
+      <span title="Change over the last 365 days">1y <b>{{ '+' if d['year_delta_' + fam] >= 0 }}{{ "{:,}".format(d['year_delta_' + fam]) }}</b></span>
+    </div>
+  </section>
+  {% endfor %}
+</div>
+<p class="attribution">Daily samples for the last year, monthly before that (history back to 1988 for IPv4).
+   Table size varies slightly by vantage point; this series is measured at AS65000/AS131072 (potaroo).</p>
+{% else %}
+<section class="panel">
+  <div class="empty"><strong>Table growth data unavailable.</strong><p>{{ result.error }}</p></div>
+</section>
+{% endif %}

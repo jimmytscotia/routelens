@@ -345,3 +345,71 @@ def test_radar_route_stats_unconfigured_without_token(store, monkeypatch):
     result = client.radar_route_stats()
 
     assert result["ok"] is False and result["unconfigured"] is True
+
+
+def test_parse_potaroo_series():
+    from routelens.sources import parse_potaroo
+
+    text = "583682400 173\n586360800 217\nnot a line\n1784048471 1064513\n"
+
+    points = parse_potaroo(text)
+
+    assert points[0] == (583682400, 173)
+    assert points[-1] == (1784048471, 1064513)
+    assert len(points) == 3
+
+
+def test_downsample_series_daily_recent_monthly_history():
+    from routelens.sources import downsample_series
+
+    day = 86400
+    now = 1784048471
+    points = []
+    # Two years of hourly-ish samples.
+    t = now - 2 * 365 * day
+    while t <= now:
+        points.append((t, (t // 3600) % 100000))
+        t += 6 * 3600
+
+    series = downsample_series(points, now_ts=now)
+
+    dates = [d for d, _ in series]
+    # Ordered, unique dates.
+    assert dates == sorted(dates)
+    assert len(dates) == len(set(dates))
+    # Recent dates are daily; older dates are month-starts only.
+    assert sum(1 for d in dates if d >= "2026-07-01") >= 10
+    old = [d for d in dates if d < "2025-07-01"]
+    assert old and all(d.endswith("-01") for d in old)
+
+
+def test_table_growth_fetches_both_families_and_caches(store, monkeypatch):
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        base = 1784048471
+        if "/v6/" in url:
+            return FakeResponse(None) if False else type("R", (), {
+                "status_code": 200, "text": f"{base - 86400} 250000\n{base} 256115\n",
+                "raise_for_status": lambda self: None, "json": lambda self: None,
+            })()
+        return type("R", (), {
+            "status_code": 200, "text": f"{base - 86400} 1060000\n{base} 1064633\n",
+            "raise_for_status": lambda self: None, "json": lambda self: None,
+        })()
+
+    monkeypatch.setattr(sources.requests, "get", fake_get)
+    client = SourceClient(store)
+
+    result = client.table_growth(now_ts=1784048471)
+
+    assert result["ok"] is True
+    assert result["data"]["current_v4"] == 1064633
+    assert result["data"]["current_v6"] == 256115
+    assert result["data"]["v4"][-1][1] == 1064633
+    assert len(calls) == 2
+
+    again = client.table_growth(now_ts=1784048471)
+    assert again["ok"] is True
+    assert len(calls) == 2  # served from cache
