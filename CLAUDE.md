@@ -118,7 +118,10 @@ All ten approved by Jim 2026-07-14. Most need the **RIS Live aggregator**
 (server-side stream consumer writing per-minute buckets to SQLite) — build it
 with #1 and reuse it everywhere:
 
-1. Collector activity league (busiest parts of the global Internet)
+1. Collector activity league (busiest parts of the global Internet) — LIVE 2026-07-14.
+   Refinement noted: subscribe to RIS_PEER_STATE and flag windows where a
+   collector's peer session reset (table re-dump masquerades as an activity
+   spike). Also consider normalising by peer count per collector.
 2. ASN churn league (most active operators, named — Zayo/Vodafone/Sky/Google)
 3. Prefix flap leaderboard
 4. Origin-change monitor (block movements, hijack/migration candidates)

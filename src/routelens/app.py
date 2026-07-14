@@ -130,6 +130,20 @@ def create_app(config: dict | None = None) -> Flask:
 
     ALLOWED_WINDOWS = {900: "15 min", 3600: "1 hour", 21600: "6 hours", 86400: "24 hours"}
 
+    @app.context_processor
+    def inject_dashboards():
+        from .dashboards import DASHBOARDS
+
+        return {"dashboards": DASHBOARDS}
+
+    @app.get("/dashboards/")
+    def dashboards_index():
+        from flask import redirect
+
+        from .dashboards import first_live_slug
+
+        return redirect(f"/dashboards/{first_live_slug()}")
+
     @app.get("/dashboards/collectors")
     def dashboard_collectors():
         return render_template("dashboards/collectors.html", windows=ALLOWED_WINDOWS)
@@ -172,6 +186,30 @@ def create_app(config: dict | None = None) -> Flask:
             rows=rows,
             window=window,
             window_label=ALLOWED_WINDOWS[window],
+        )
+
+    ASN_WINDOWS = {3600: "1 hour", 21600: "6 hours", 86400: "24 hours", 604800: "7 days"}
+
+    @app.get("/dashboards/asns")
+    def dashboard_asns():
+        return render_template("dashboards/asns.html", windows=ASN_WINDOWS)
+
+    @app.get("/partials/dashboards/asns")
+    def partial_dashboard_asns():
+        from datetime import datetime, timedelta, timezone
+
+        try:
+            window = int(request.args.get("window", "21600"))
+        except ValueError:
+            abort(400)
+        if window not in ASN_WINDOWS:
+            abort(400)
+        since = (datetime.now(timezone.utc) - timedelta(seconds=window)).strftime("%Y-%m-%dT%H:%M:%S")
+        rows = store.asn_league(since=since, limit=50)
+        for rank, row in enumerate(rows, start=1):
+            row["rank"] = rank
+        return render_template(
+            "partials/asn_league.html", rows=rows, window_label=ASN_WINDOWS[window]
         )
 
     @app.post("/api/globalping")

@@ -257,3 +257,20 @@ def test_ripestat_network_info(store, monkeypatch):
 
     assert result["data"]["asns"] == [15169]
     assert result["data"]["prefix"] == "8.8.8.0/24"
+
+
+def test_parse_asn_csv_handles_quoting_and_as_prefix():
+    from routelens.sources import parse_asn_csv
+
+    csv_text = (
+        "asn,name,class,cc\n"
+        "AS2856,British Telecommunications PLC,Transit,GB\n"
+        'AS10003,"Ogaki Cable Television Co.,Inc.",Eyeball,JP\n'
+        "junk-line-without-asn\n"
+    )
+
+    rows = parse_asn_csv(csv_text)
+
+    assert (2856, "British Telecommunications PLC", "GB") in rows
+    assert (10003, "Ogaki Cable Television Co.,Inc.", "JP") in rows
+    assert len(rows) == 2

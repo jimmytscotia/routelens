@@ -122,3 +122,48 @@ def test_activity_prune_removes_old_buckets(tmp_path):
 
     assert removed == 1
     assert store.activity_league(since="2026-01-01T00:00:00")[0]["updates"] == 2
+
+
+def test_asn_activity_league_with_names(tmp_path):
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "asn.db")
+    store.init_schema()
+    store.upsert_asn_names([(2856, "British Telecommunications PLC", "GB"), (15169, "Google LLC", "US")])
+    store.record_asn_bucket(bucket_ts="2026-07-14T13:00:00", asn=2856, updates=50, announcements=60)
+    store.record_asn_bucket(bucket_ts="2026-07-14T13:00:00", asn=15169, updates=200, announcements=220)
+    store.record_asn_bucket(bucket_ts="2026-07-14T14:00:00", asn=2856, updates=30, announcements=35)
+    # Unknown ASN still appears, with empty name.
+    store.record_asn_bucket(bucket_ts="2026-07-14T13:00:00", asn=64500, updates=500, announcements=500)
+
+    league = store.asn_league(since="2026-07-14T12:00:00", limit=10)
+
+    assert [row["asn"] for row in league] == [64500, 15169, 2856]
+    assert league[1]["name"] == "Google LLC"
+    assert league[2]["name"] == "British Telecommunications PLC"
+    assert league[2]["country"] == "GB"
+    assert league[2]["updates"] == 80
+    assert league[0]["name"] == ""
+
+
+def test_asn_names_upsert_replaces(tmp_path):
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "asn.db")
+    store.init_schema()
+    store.upsert_asn_names([(2856, "Old Name", "GB")])
+    store.upsert_asn_names([(2856, "British Telecommunications PLC", "GB")])
+    store.record_asn_bucket(bucket_ts="2026-07-14T13:00:00", asn=2856, updates=1, announcements=1)
+
+    assert store.asn_league(since="2026-01-01T00:00:00", limit=1)[0]["name"] == "British Telecommunications PLC"
+
+
+def test_prune_asn_activity(tmp_path):
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "asn.db")
+    store.init_schema()
+    store.record_asn_bucket(bucket_ts="2026-07-01T00:00:00", asn=1, updates=1, announcements=1)
+    store.record_asn_bucket(bucket_ts="2026-07-14T13:00:00", asn=1, updates=1, announcements=1)
+
+    assert store.prune_asn_activity(before="2026-07-07T00:00:00") == 1

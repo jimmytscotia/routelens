@@ -51,6 +51,20 @@ CREATE TABLE IF NOT EXISTS ris_activity (
   PRIMARY KEY (bucket_ts, rrc)
 );
 CREATE INDEX IF NOT EXISTS idx_ris_activity_rrc_time ON ris_activity(rrc, bucket_ts);
+
+CREATE TABLE IF NOT EXISTS ris_asn_activity (
+  bucket_ts TEXT NOT NULL,           -- hour bucket, ISO8601 UTC
+  asn INTEGER NOT NULL,              -- origin ASN (last hop of announced paths)
+  updates INTEGER NOT NULL DEFAULT 0,
+  announcements INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (bucket_ts, asn)
+);
+
+CREATE TABLE IF NOT EXISTS asn_names (
+  asn INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  country TEXT NOT NULL DEFAULT ''
+);
 """
 
 
@@ -277,6 +291,54 @@ class RouteLensStore:
     def prune_activity(self, *, before: str) -> int:
         with self.connect() as conn:
             cur = conn.execute("DELETE FROM ris_activity WHERE bucket_ts < ?", (before,))
+            return cur.rowcount
+
+    def record_asn_bucket(self, *, bucket_ts: str, asn: int, updates: int, announcements: int) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO ris_asn_activity(bucket_ts, asn, updates, announcements)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(bucket_ts, asn) DO UPDATE
+                   SET updates = excluded.updates,
+                       announcements = excluded.announcements
+                """,
+                (bucket_ts, asn, updates, announcements),
+            )
+
+    def upsert_asn_names(self, rows: list[tuple[int, str, str]]) -> None:
+        with self.connect() as conn:
+            conn.executemany(
+                """
+                INSERT INTO asn_names(asn, name, country) VALUES (?, ?, ?)
+                ON CONFLICT(asn) DO UPDATE SET name = excluded.name, country = excluded.country
+                """,
+                rows,
+            )
+
+    def asn_league(self, *, since: str, limit: int = 50) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT a.asn,
+                       COALESCE(n.name, '') AS name,
+                       COALESCE(n.country, '') AS country,
+                       SUM(a.updates) AS updates,
+                       SUM(a.announcements) AS announcements
+                  FROM ris_asn_activity a
+                  LEFT JOIN asn_names n ON n.asn = a.asn
+                 WHERE a.bucket_ts >= ?
+                 GROUP BY a.asn
+                 ORDER BY updates DESC
+                 LIMIT ?
+                """,
+                (since, limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def prune_asn_activity(self, *, before: str) -> int:
+        with self.connect() as conn:
+            cur = conn.execute("DELETE FROM ris_asn_activity WHERE bucket_ts < ?", (before,))
             return cur.rowcount
 
     @staticmethod

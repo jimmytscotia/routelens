@@ -1,26 +1,26 @@
 {% extends "dashboards/_layout.html" %}
-{% block title %}Collector activity · RouteLens{% endblock %}
+{% block title %}ASN churn · RouteLens{% endblock %}
 {% block dashboard %}
   <div class="pagehead" style="padding-top:0">
-    <h1>Collector activity league</h1>
-    <p>Which parts of the global Internet are generating the most BGP activity, measured as
-       updates received per RIPE RIS collector. Aggregated from the live stream in one-minute buckets.</p>
+    <h1>ASN churn league</h1>
+    <p>Which operators are generating the most BGP announcement activity, attributed to the
+       origin AS of each announced path and aggregated hourly. Names and countries from bgp.tools.</p>
   </div>
   <section class="panel">
     <header class="phead">
       <div class="windowtabs" role="tablist" aria-label="Time window">
         {% for seconds, label in windows.items() %}
-        <button class="wtab{% if seconds == 3600 %} active{% endif %}" role="tab"
-                hx-get="/partials/dashboards/collectors?window={{ seconds }}"
-                hx-target="#league" hx-swap="innerHTML"
+        <button class="wtab{% if seconds == 21600 %} active{% endif %}" role="tab"
+                hx-get="/partials/dashboards/asns?window={{ seconds }}"
+                hx-target="#asnleague" hx-swap="innerHTML"
                 onclick="document.querySelectorAll('.wtab').forEach(b=>b.classList.remove('active'));this.classList.add('active')">
           {{ label }}</button>
         {% endfor %}
       </div>
-      <span class="srctag">ris-live.ripe.net · 1-min buckets</span>
+      <span class="srctag">ris-live.ripe.net · 1-hour buckets · names: bgp.tools</span>
     </header>
-    <div id="league"
-         hx-get="/partials/dashboards/collectors?window=3600"
+    <div id="asnleague"
+         hx-get="/partials/dashboards/asns?window=21600"
          hx-trigger="load, every 60s"
          hx-swap="innerHTML">
       <p class="loading">Loading…</p>
@@ -35,6 +35,5 @@
   .uk-row td{background:color-mix(in srgb,var(--accent) 7%,transparent)}
   .uk-tag{font-size:.5625rem;font-family:var(--mono);color:var(--accent-ink);
     border:1px solid var(--line-strong);border-radius:999px;padding:1px 6px;margin-left:6px;vertical-align:middle}
-  .spark{stroke:var(--accent);stroke-width:1.5;fill:none;opacity:.9}
 </style>
 {% endblock %}

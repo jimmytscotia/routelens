@@ -1,0 +1,32 @@
+{% if rows %}
+<div class="tablewrap">
+<table class="datatable">
+  <thead>
+    <tr>
+      <th class="num">#</th><th>Origin AS</th><th>Operator</th><th>CC</th>
+      <th class="num">Updates ({{ window_label }})</th><th class="num">Announced prefixes</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for row in rows %}
+    <tr{% if row.country == 'GB' %} class="uk-row"{% endif %}>
+      <td class="num mono">{{ row.rank }}</td>
+      <td class="mono"><a href="/q?query=AS{{ row.asn }}">AS{{ row.asn }}</a>{% if row.country == 'GB' %}<span class="uk-tag">UK</span>{% endif %}</td>
+      <td>{{ row.name or '—' }}</td>
+      <td class="mono">{{ row.country }}</td>
+      <td class="num mono">{{ "{:,}".format(row.updates) }}</td>
+      <td class="num mono">{{ "{:,}".format(row.announcements) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="attribution">Origin attribution counts announcement-bearing updates only; withdrawals carry no AS path.
+   High churn can mean instability, traffic engineering, or a large prefix estate — it is not by itself a fault.</p>
+{% else %}
+<div class="empty">
+  <strong>No ASN activity data yet.</strong>
+  <p>The RIS Live aggregator hasn't recorded any hourly origin buckets in this window.
+     If the aggregator was just upgraded, the first hour is still filling.</p>
+</div>
+{% endif %}

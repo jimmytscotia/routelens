@@ -15,6 +15,35 @@ GLOBALPING_BASE = "https://api.globalping.io/v1"
 RADAR_BASE = "https://api.cloudflare.com/client/v4/radar"
 
 USER_AGENT = "RouteLens/0.2 (NextHop Lab demo; jim-tobin@outlook.com)"
+ASN_CSV_URL = "https://bgp.tools/asns.csv"
+
+
+def parse_asn_csv(text: str) -> list[tuple[int, str, str]]:
+    """Parse bgp.tools asns.csv (asn,name,class,cc) into (asn, name, country) rows."""
+    import csv
+    import io
+
+    rows: list[tuple[int, str, str]] = []
+    for record in csv.reader(io.StringIO(text)):
+        if len(record) < 2 or not record[0].upper().startswith("AS"):
+            continue
+        asn_text = record[0][2:]
+        if not asn_text.isdigit():
+            continue
+        country = record[3].strip() if len(record) > 3 else ""
+        rows.append((int(asn_text), record[1].strip(), country))
+    return rows
+
+
+def refresh_asn_names(store: RouteLensStore, timeout: int = 60) -> int:
+    """Fetch the bgp.tools ASN name table and upsert it. Returns rows written.
+    bgp.tools asks for a descriptive User-Agent and at most daily fetches."""
+    response = requests.get(ASN_CSV_URL, headers={"User-Agent": USER_AGENT}, timeout=timeout)
+    response.raise_for_status()
+    rows = parse_asn_csv(response.text)
+    if rows:
+        store.upsert_asn_names(rows)
+    return len(rows)
 
 
 class SourceClient:

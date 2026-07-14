@@ -69,3 +69,34 @@ def test_flush_writes_buckets_and_drops_only_completed_minutes(tmp_path):
     rrc01 = next(r for r in store.activity_league(since="2026-07-14T00:00:00") if r["rrc"] == "rrc01")
     assert rrc01["updates"] == 3
     assert rrc01["minutes"] == 2
+
+
+def test_accumulator_folds_origin_asn_hourly_buckets():
+    acc = ActivityAccumulator()
+
+    acc.ingest({**msg(T0 + 1, ann_prefixes=["192.0.2.0/24", "198.51.100.0/24"]), "path": [64500, 3356, 15169]})
+    acc.ingest({**msg(T0 + 30, ann_prefixes=["203.0.113.0/24"]), "path": [64501, 15169]})
+    acc.ingest({**msg(T0 + 40, ann_prefixes=["2001:db8::/32"]), "path": [64501, 2856]})
+    # Withdrawal-only update has no path: no origin attribution.
+    acc.ingest(msg(T0 + 50, wdr_prefixes=["203.0.113.0/24"]))
+    # AS_SET as the last element is skipped rather than misattributed.
+    acc.ingest({**msg(T0 + 55, ann_prefixes=["192.0.2.0/24"]), "path": [64500, [64512, 64513]]})
+
+    asn_buckets = acc.asn_snapshot()
+
+    assert asn_buckets[("2026-07-14T13:00:00", 15169)] == {"updates": 2, "announcements": 3}
+    assert asn_buckets[("2026-07-14T13:00:00", 2856)] == {"updates": 1, "announcements": 1}
+    assert len(asn_buckets) == 2
+
+
+def test_flush_writes_asn_buckets_hourly(tmp_path):
+    store = RouteLensStore(tmp_path / "agg2.db")
+    store.init_schema()
+    acc = ActivityAccumulator()
+    acc.ingest({**msg(T0 + 1, ann_prefixes=["192.0.2.0/24"]), "path": [64500, 15169]})
+
+    acc.flush(store, now_ts=T0 + 30)
+
+    league = store.asn_league(since="2026-07-14T00:00:00", limit=5)
+    assert league[0]["asn"] == 15169
+    assert league[0]["updates"] == 1
