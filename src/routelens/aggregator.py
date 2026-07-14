@@ -42,11 +42,17 @@ def _hour_bucket(unix_ts: float) -> str:
 
 
 class ActivityAccumulator:
-    def __init__(self) -> None:
+    def __init__(self, *, flap_min_events: int = 8, flap_max_rows: int = 5000) -> None:
         self._buckets: dict[tuple[str, str], dict[str, int]] = {}
         # Origin-ASN buckets are hourly: per-minute buckets across ~10k+
         # active origins would explode row counts for no analytical gain.
         self._asn_buckets: dict[tuple[str, int], dict[str, int]] = {}
+        # Per-prefix hourly counts. Hundreds of thousands of prefixes update
+        # each hour, almost all once or twice — only rows with at least
+        # flap_min_events are ever flushed, capped at flap_max_rows per flush.
+        self._prefix_buckets: dict[tuple[str, str], dict] = {}
+        self.flap_min_events = flap_min_events
+        self.flap_max_rows = flap_max_rows
 
     def ingest(self, data: dict) -> None:
         host = data.get("host") or ""
@@ -77,6 +83,22 @@ class ActivityAccumulator:
             for ann in data.get("announcements") or []:
                 abucket["prefixes"].update(ann.get("prefixes") or [])
 
+        # Per-prefix flap counting (hourly).
+        hour = _hour_bucket(float(ts))
+        for ann in data.get("announcements") or []:
+            for prefix in ann.get("prefixes") or []:
+                pb = self._prefix_buckets.setdefault(
+                    (hour, prefix), {"announcements": 0, "withdrawals": 0, "origin_asn": None}
+                )
+                pb["announcements"] += 1
+                if isinstance(origin, int):
+                    pb["origin_asn"] = origin
+        for prefix in data.get("withdrawals") or []:
+            pb = self._prefix_buckets.setdefault(
+                (hour, prefix), {"announcements": 0, "withdrawals": 0, "origin_asn": None}
+            )
+            pb["withdrawals"] += 1
+
     def snapshot(self) -> dict[tuple[str, str], dict[str, int]]:
         return dict(self._buckets)
 
@@ -85,6 +107,9 @@ class ActivityAccumulator:
             key: {**{k: v for k, v in b.items() if k != "prefixes"}, "distinct": len(b["prefixes"])}
             for key, b in self._asn_buckets.items()
         }
+
+    def prefix_snapshot(self) -> dict[tuple[str, str], dict]:
+        return dict(self._prefix_buckets)
 
     def flush(self, store: RouteLensStore, *, now_ts: float | None = None) -> int:
         """Write all buckets (idempotent upsert); drop completed periods from
@@ -116,6 +141,26 @@ class ActivityAccumulator:
             written += 1
             if bucket_ts < current_hour:
                 del self._asn_buckets[(bucket_ts, asn)]
+
+        # Prefixes: flush only the noisy ones, loudest first, capped per flush.
+        noisy = [
+            (key, pb) for key, pb in self._prefix_buckets.items()
+            if pb["announcements"] + pb["withdrawals"] >= self.flap_min_events
+        ]
+        noisy.sort(key=lambda item: item[1]["announcements"] + item[1]["withdrawals"], reverse=True)
+        for (bucket_ts, prefix), pb in noisy[: self.flap_max_rows]:
+            store.record_prefix_bucket(
+                bucket_ts=bucket_ts,
+                prefix=prefix,
+                announcements=pb["announcements"],
+                withdrawals=pb["withdrawals"],
+                origin_asn=pb["origin_asn"],
+            )
+            written += 1
+        # Completed hours are dropped entirely (flushed or below threshold).
+        for (bucket_ts, prefix) in list(self._prefix_buckets):
+            if bucket_ts < current_hour:
+                del self._prefix_buckets[(bucket_ts, prefix)]
         return written
 
 
@@ -149,6 +194,7 @@ async def run(store: RouteLensStore) -> None:
                         ).strftime("%Y-%m-%dT%H:%M:%S")
                         removed = store.prune_activity(before=cutoff)
                         removed += store.prune_asn_activity(before=cutoff)
+                        removed += store.prune_prefix_activity(before=cutoff)
                         last_prune = now
                         log.info("pruned %d buckets older than %s", removed, cutoff)
                     if now - last_names >= NAMES_REFRESH_S:

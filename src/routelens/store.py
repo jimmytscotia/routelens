@@ -66,6 +66,15 @@ CREATE TABLE IF NOT EXISTS asn_names (
   name TEXT NOT NULL,
   country TEXT NOT NULL DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS ris_prefix_activity (
+  bucket_ts TEXT NOT NULL,           -- hour bucket, ISO8601 UTC
+  prefix TEXT NOT NULL,
+  announcements INTEGER NOT NULL DEFAULT 0,
+  withdrawals INTEGER NOT NULL DEFAULT 0,
+  origin_asn INTEGER,                -- last origin seen announcing this prefix
+  PRIMARY KEY (bucket_ts, prefix)
+);
 """
 
 
@@ -350,6 +359,62 @@ class RouteLensStore:
     def prune_asn_activity(self, *, before: str) -> int:
         with self.connect() as conn:
             cur = conn.execute("DELETE FROM ris_asn_activity WHERE bucket_ts < ?", (before,))
+            return cur.rowcount
+
+    def record_prefix_bucket(
+        self, *, bucket_ts: str, prefix: str, announcements: int, withdrawals: int, origin_asn: int | None
+    ) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO ris_prefix_activity(bucket_ts, prefix, announcements, withdrawals, origin_asn)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(bucket_ts, prefix) DO UPDATE
+                   SET announcements = excluded.announcements,
+                       withdrawals = excluded.withdrawals,
+                       origin_asn = COALESCE(excluded.origin_asn, origin_asn)
+                """,
+                (bucket_ts, prefix, announcements, withdrawals, origin_asn),
+            )
+
+    def prefix_flap_league(self, *, since: str, limit: int = 50) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT p.prefix,
+                       SUM(p.announcements) AS announcements,
+                       SUM(p.withdrawals) AS withdrawals,
+                       SUM(p.announcements) + SUM(p.withdrawals) AS events,
+                       COUNT(*) AS hours,
+                       -- most recent non-null origin
+                       (SELECT origin_asn FROM ris_prefix_activity p2
+                         WHERE p2.prefix = p.prefix AND p2.bucket_ts >= ? AND p2.origin_asn IS NOT NULL
+                         ORDER BY p2.bucket_ts DESC LIMIT 1) AS origin_asn
+                  FROM ris_prefix_activity p
+                 WHERE p.bucket_ts >= ?
+                 GROUP BY p.prefix
+                 ORDER BY events DESC
+                 LIMIT ?
+                """,
+                (since, since, limit),
+            ).fetchall()
+        result = []
+        with self.connect() as conn:
+            for row in rows:
+                item = dict(row)
+                name_row = None
+                if item["origin_asn"] is not None:
+                    name_row = conn.execute(
+                        "SELECT name, country FROM asn_names WHERE asn = ?", (item["origin_asn"],)
+                    ).fetchone()
+                item["origin_name"] = name_row["name"] if name_row else ""
+                item["origin_country"] = name_row["country"] if name_row else ""
+                result.append(item)
+        return result
+
+    def prune_prefix_activity(self, *, before: str) -> int:
+        with self.connect() as conn:
+            cur = conn.execute("DELETE FROM ris_prefix_activity WHERE bucket_ts < ?", (before,))
             return cur.rowcount
 
     @staticmethod

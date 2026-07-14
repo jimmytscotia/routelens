@@ -26,25 +26,35 @@
   let pending = {};   // key -> {upd, ann, wdr}
 
   function tbody() { return document.querySelector('tbody[data-live]'); }
-  function sortCls() { return tbody()?.dataset.live === 'rrc' ? 'c-upd' : 'c-ann'; }
+  function sortCls() {
+    const mode = tbody()?.dataset.live;
+    return mode === 'rrc' ? 'c-upd' : (mode === 'prefix' ? 'c-evt' : 'c-ann');
+  }
+  function pend(key) { return pending[key] || (pending[key] = {upd: 0, ann: 0, wdr: 0}); }
 
   function handle(d) {
     const body = tbody();
     if (!body) return;
     const mode = body.dataset.live;
-    const annCount = (d.announcements || []).reduce((n, a) => n + (a.prefixes || []).length, 0);
-    const wdrCount = (d.withdrawals || []).length;
+    const annPrefixes = (d.announcements || []).flatMap(a => a.prefixes || []);
+    const wdrPrefixes = d.withdrawals || [];
+    if (mode === 'prefix') {
+      // One message can touch several prefix rows.
+      for (const pfx of annPrefixes) pend(pfx).ann += 1;
+      for (const pfx of wdrPrefixes) pend(pfx).wdr += 1;
+      return;
+    }
     let key;
     if (mode === 'rrc') {
       key = (d.host || '').split('.')[0];
     } else {
       const path = d.path || [];
       const origin = path[path.length - 1];
-      if (!annCount || typeof origin !== 'number') return;
+      if (!annPrefixes.length || typeof origin !== 'number') return;
       key = String(origin);
     }
-    const p = pending[key] || (pending[key] = {upd: 0, ann: 0, wdr: 0});
-    p.upd += 1; p.ann += annCount; p.wdr += wdrCount;
+    const p = pend(key);
+    p.upd += 1; p.ann += annPrefixes.length; p.wdr += wdrPrefixes.length;
   }
 
   function bump(row, cls, delta) {
@@ -74,6 +84,9 @@
       if (mode === 'rrc') {
         bump(row, 'c-upd', p.upd);
         bump(row, 'c-wdr', p.wdr);
+      } else if (mode === 'prefix') {
+        bump(row, 'c-wdr', p.wdr);
+        bump(row, 'c-evt', p.ann + p.wdr);
       }
       bump(row, 'c-ann', p.ann);
       changed = true;

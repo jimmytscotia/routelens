@@ -6,7 +6,7 @@ from __future__ import annotations
 DASHBOARDS = [
     {"slug": "collectors", "title": "Collector activity", "status": "live"},
     {"slug": "asns", "title": "ASN churn", "status": "live"},
-    {"slug": "flaps", "title": "Prefix flaps", "status": "planned"},
+    {"slug": "flaps", "title": "Prefix flaps", "status": "live"},
     {"slug": "origin-changes", "title": "Origin changes", "status": "planned"},
     {"slug": "rpki", "title": "RPKI scoreboard", "status": "planned"},
     {"slug": "address-space", "title": "Address space", "status": "planned"},

@@ -171,3 +171,45 @@ def test_prune_asn_activity(tmp_path):
     store.record_asn_bucket(bucket_ts="2026-07-14T13:00:00", asn=1, updates=1, announcements=1, distinct=1)
 
     assert store.prune_asn_activity(before="2026-07-07T00:00:00") == 1
+
+
+def test_prefix_flap_league_joins_names_and_ranks_by_events(tmp_path):
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "flap.db")
+    store.init_schema()
+    store.upsert_asn_names([(15169, "Google LLC", "US"), (2856, "British Telecommunications PLC", "GB")])
+    store.record_prefix_bucket(
+        bucket_ts="2026-07-14T13:00:00", prefix="203.0.113.0/24",
+        announcements=40, withdrawals=35, origin_asn=15169,
+    )
+    store.record_prefix_bucket(
+        bucket_ts="2026-07-14T14:00:00", prefix="203.0.113.0/24",
+        announcements=10, withdrawals=8, origin_asn=15169,
+    )
+    store.record_prefix_bucket(
+        bucket_ts="2026-07-14T13:00:00", prefix="198.51.100.0/24",
+        announcements=30, withdrawals=0, origin_asn=2856,
+    )
+
+    league = store.prefix_flap_league(since="2026-07-14T12:00:00", limit=10)
+
+    assert [row["prefix"] for row in league] == ["203.0.113.0/24", "198.51.100.0/24"]
+    assert league[0]["announcements"] == 50
+    assert league[0]["withdrawals"] == 43
+    assert league[0]["events"] == 93
+    assert league[0]["hours"] == 2
+    assert league[0]["origin_asn"] == 15169
+    assert league[0]["origin_name"] == "Google LLC"
+    assert league[1]["origin_country"] == "GB"
+
+
+def test_prune_prefix_activity(tmp_path):
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "flap.db")
+    store.init_schema()
+    store.record_prefix_bucket(bucket_ts="2026-07-01T00:00:00", prefix="p", announcements=1, withdrawals=0, origin_asn=None)
+    store.record_prefix_bucket(bucket_ts="2026-07-14T13:00:00", prefix="p", announcements=1, withdrawals=0, origin_asn=None)
+
+    assert store.prune_prefix_activity(before="2026-07-07T00:00:00") == 1

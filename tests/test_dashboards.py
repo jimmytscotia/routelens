@@ -214,3 +214,44 @@ def test_league_column_headers_carry_tooltips(tmp_path):
     for phrase in ("route collector", "peers", "withdraw"):
         assert phrase in collectors, phrase
     assert collectors.count('title="') >= 9
+
+
+def test_flap_league_page_and_partial(tmp_path):
+    app = _app(tmp_path)
+    store = app.config["ROUTELENS_STORE"]
+    store.upsert_asn_names([(15169, "Google LLC", "US"), (2856, "British Telecommunications PLC", "GB")])
+    store.record_prefix_bucket(
+        bucket_ts=_hour_bucket(0), prefix="203.0.113.0/24",
+        announcements=40, withdrawals=35, origin_asn=15169,
+    )
+    store.record_prefix_bucket(
+        bucket_ts=_hour_bucket(0), prefix="198.51.100.0/24",
+        announcements=30, withdrawals=0, origin_asn=2856,
+    )
+    client = app.test_client()
+
+    page = client.get("/dashboards/flaps")
+    assert page.status_code == 200
+    assert b"Prefix flap" in page.data
+
+    body = client.get("/partials/dashboards/flaps?window=21600").data.decode()
+    assert body.index("203.0.113.0/24") < body.index("198.51.100.0/24")
+    assert "Google LLC" in body
+    # Announce+withdraw cycling is flagged; announce-only churn is not.
+    assert 'class="badge critical"' in body and "flapping" in body
+    # UK-origin prefixes highlighted.
+    assert "uk-row" in body
+    # Prefixes link into the looking glass; live markers present.
+    assert "/q?query=203.0.113.0/24" in body
+    assert 'data-live="prefix"' in body
+    assert 'data-key="203.0.113.0/24"' in body
+
+
+def test_flap_league_partial_empty_and_bad_window(tmp_path):
+    client = _app(tmp_path).test_client()
+
+    empty = client.get("/partials/dashboards/flaps?window=21600")
+    assert empty.status_code == 200
+    assert "aggregator" in empty.data.decode().lower()
+
+    assert client.get("/partials/dashboards/flaps?window=42").status_code == 400

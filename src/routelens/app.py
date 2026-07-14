@@ -212,6 +212,30 @@ def create_app(config: dict | None = None) -> Flask:
             "partials/asn_league.html", rows=rows, window_label=ASN_WINDOWS[window]
         )
 
+    FLAP_WINDOWS = {3600: "1 hour", 21600: "6 hours", 86400: "24 hours"}
+
+    @app.get("/dashboards/flaps")
+    def dashboard_flaps():
+        return render_template("dashboards/flaps.html", windows=FLAP_WINDOWS)
+
+    @app.get("/partials/dashboards/flaps")
+    def partial_dashboard_flaps():
+        from datetime import datetime, timedelta, timezone
+
+        try:
+            window = int(request.args.get("window", "21600"))
+        except ValueError:
+            abort(400)
+        if window not in FLAP_WINDOWS:
+            abort(400)
+        since = (datetime.now(timezone.utc) - timedelta(seconds=window)).strftime("%Y-%m-%dT%H:%M:%S")
+        rows = store.prefix_flap_league(since=since, limit=50)
+        for rank, row in enumerate(rows, start=1):
+            row["rank"] = rank
+        return render_template(
+            "partials/flap_league.html", rows=rows, window_label=FLAP_WINDOWS[window]
+        )
+
     @app.post("/api/globalping")
     def api_globalping_create():
         payload = request.get_json(silent=True) or {}

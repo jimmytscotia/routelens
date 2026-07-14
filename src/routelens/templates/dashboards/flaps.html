@@ -1,0 +1,41 @@
+{% extends "dashboards/_layout.html" %}
+{% block title %}Prefix flaps · RouteLens{% endblock %}
+{% block dashboard %}
+  <div class="pagehead" style="padding-top:0">
+    <h1>Prefix flap leaderboard</h1>
+    <p>The noisiest prefixes on the Internet right now: routes being announced and withdrawn
+       repeatedly. Only prefixes with sustained activity (8+ events in an hour) are recorded —
+       the quiet majority never makes this table.</p>
+  </div>
+  <section class="panel">
+    <header class="phead">
+      <div class="windowtabs" role="tablist" aria-label="Time window">
+        {% for seconds, label in windows.items() %}
+        <button class="wtab{% if seconds == 21600 %} active{% endif %}" role="tab"
+                hx-get="/partials/dashboards/flaps?window={{ seconds }}"
+                hx-target="#flapleague" hx-swap="innerHTML"
+                onclick="document.querySelectorAll('.wtab').forEach(b=>b.classList.remove('active'));this.classList.add('active')">
+          {{ label }}</button>
+        {% endfor %}
+      </div>
+      <span class="srctag"><span id="livebadge" class="livebadge connecting">connecting…</span> · 1-hour buckets · ≥8 events</span>
+    </header>
+    <div id="flapleague"
+         hx-get="/partials/dashboards/flaps?window=21600"
+         hx-trigger="load, every 60s"
+         hx-swap="innerHTML">
+      <p class="loading">Loading…</p>
+    </div>
+  </section>
+  {% include "partials/_live_league.html" %}
+<style>
+  .windowtabs{display:flex;gap:4px}
+  .wtab{background:var(--inset);border:1px solid var(--line);color:var(--muted);
+    font:inherit;font-size:.75rem;padding:4px 10px;border-radius:var(--r);cursor:pointer}
+  .wtab:hover{color:var(--ink)}
+  .wtab.active{color:var(--ink);border-color:var(--accent)}
+  .uk-row td{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+  .uk-tag{font-size:.5625rem;font-family:var(--mono);color:var(--accent-ink);
+    border:1px solid var(--line-strong);border-radius:999px;padding:1px 6px;margin-left:6px;vertical-align:middle}
+</style>
+{% endblock %}

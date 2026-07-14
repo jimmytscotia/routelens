@@ -1,0 +1,46 @@
+{% if rows %}
+<div class="tablewrap">
+<table class="datatable">
+  <thead>
+    <tr>
+      <th class="num" title="Rank by total events (announcements + withdrawals) in the selected window">#</th>
+      <th title="The prefix whose route keeps changing. Click to open in the looking glass.">Prefix</th>
+      <th title="The AS most recently seen originating this prefix, with name from bgp.tools">Origin</th>
+      <th class="num" title="Times this prefix was announced (route present/changed) in the window">Announce</th>
+      <th class="num" title="Times this prefix was withdrawn (reachability removed) in the window">Withdraw</th>
+      <th class="num" title="Announcements + withdrawals — the leaderboard ranking">Events ({{ window_label }})</th>
+      <th class="num" title="How many separate hours this prefix was noisy in — sustained vs one burst">Hours</th>
+      <th title="flapping = announce AND withdraw cycling (reachability bouncing). churn = re-announcements only (path/attribute changes, reachability stable).">Pattern</th>
+    </tr>
+  </thead>
+  <tbody data-live="prefix">
+  {% for row in rows %}
+    <tr data-key="{{ row.prefix }}"{% if row.origin_country == 'GB' %} class="uk-row"{% endif %}>
+      <td class="num mono c-rank">{{ row.rank }}</td>
+      <td class="mono"><a href="/q?query={{ row.prefix|urlencode }}">{{ row.prefix }}</a>{% if row.origin_country == 'GB' %}<span class="uk-tag">UK</span>{% endif %}</td>
+      <td>{% if row.origin_asn %}<a class="mono" href="/q?query=AS{{ row.origin_asn }}">AS{{ row.origin_asn }}</a>
+          {% if row.origin_name %}<span title="{{ row.origin_name }}"> {{ row.origin_name|truncate(28) }}</span>{% endif %}
+          {% else %}—{% endif %}</td>
+      <td class="num mono c-ann" data-v="{{ row.announcements }}">{{ "{:,}".format(row.announcements) }}</td>
+      <td class="num mono c-wdr" data-v="{{ row.withdrawals }}">{{ "{:,}".format(row.withdrawals) }}</td>
+      <td class="num mono c-evt" data-v="{{ row.events }}">{{ "{:,}".format(row.events) }}</td>
+      <td class="num mono">{{ row.hours }}</td>
+      <td>{% if row.withdrawals and row.announcements %}
+            <span class="badge critical" title="Reachability is cycling: the route is being announced and withdrawn repeatedly. Downstream users of this prefix are seeing intermittent connectivity.">flapping</span>
+          {% else %}
+            <span class="badge unknown" title="Re-announcements only: the path or attributes keep changing but reachability holds. Often traffic engineering or an unstable-but-redundant upstream.">churn</span>
+          {% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="attribution">Counting is event-based across all RIS collectors, so one real-world flap is seen
+   once per collector peer that reports it — compare rows against each other, not against an absolute scale.</p>
+{% else %}
+<div class="empty">
+  <strong>No flap data yet.</strong>
+  <p>The RIS Live aggregator hasn't recorded any noisy prefixes in this window.
+     If it was just upgraded, the first hourly bucket is still filling.</p>
+</div>
+{% endif %}

@@ -114,3 +114,42 @@ def test_flush_writes_asn_buckets_hourly(tmp_path):
     league = store.asn_league(since="2026-07-14T00:00:00", limit=5)
     assert league[0]["announcements"] == 2
     assert league[0]["peak_distinct"] == 1
+
+
+def test_accumulator_folds_prefix_hourly_buckets_with_origin():
+    acc = ActivityAccumulator()
+
+    acc.ingest({**msg(T0 + 1, ann_prefixes=["203.0.113.0/24"]), "path": [64500, 15169]})
+    acc.ingest({**msg(T0 + 10, wdr_prefixes=["203.0.113.0/24"])})
+    acc.ingest({**msg(T0 + 20, ann_prefixes=["203.0.113.0/24"]), "path": [64501, 15169]})
+    acc.ingest({**msg(T0 + 30, ann_prefixes=["198.51.100.0/24"]), "path": [64500, 2856]})
+
+    buckets = acc.prefix_snapshot()
+
+    flappy = buckets[("2026-07-14T13:00:00", "203.0.113.0/24")]
+    assert flappy["announcements"] == 2
+    assert flappy["withdrawals"] == 1
+    assert flappy["origin_asn"] == 15169
+    quiet = buckets[("2026-07-14T13:00:00", "198.51.100.0/24")]
+    assert quiet["announcements"] == 1
+    assert quiet["withdrawals"] == 0
+
+
+def test_flush_writes_only_prefixes_above_event_threshold(tmp_path):
+    store = RouteLensStore(tmp_path / "agg3.db")
+    store.init_schema()
+    acc = ActivityAccumulator(flap_min_events=3)
+    # Noisy prefix: 4 events. Quiet prefix: 1 event.
+    acc.ingest({**msg(T0 + 1, ann_prefixes=["203.0.113.0/24"]), "path": [64500, 15169]})
+    acc.ingest({**msg(T0 + 2, wdr_prefixes=["203.0.113.0/24"])})
+    acc.ingest({**msg(T0 + 3, ann_prefixes=["203.0.113.0/24"]), "path": [64500, 15169]})
+    acc.ingest({**msg(T0 + 4, wdr_prefixes=["203.0.113.0/24"])})
+    acc.ingest({**msg(T0 + 5, ann_prefixes=["198.51.100.0/24"]), "path": [64500, 2856]})
+
+    acc.flush(store, now_ts=T0 + 30)
+
+    league = store.prefix_flap_league(since="2026-07-14T00:00:00", limit=10)
+    assert [row["prefix"] for row in league] == ["203.0.113.0/24"]
+    assert league[0]["announcements"] == 2
+    assert league[0]["withdrawals"] == 2
+    assert league[0]["origin_asn"] == 15169
