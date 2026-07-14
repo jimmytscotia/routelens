@@ -1,0 +1,44 @@
+{% extends "dashboards/_layout.html" %}
+{% block title %}Transit centrality · RouteLens{% endblock %}
+{% block dashboard %}
+  <div class="pagehead" style="padding-top:0">
+    <h1>Transit centrality</h1>
+    <p>Who carries the Internet: how often each network appears as a transit hop in live AS paths —
+       not originating the route, not collecting it, but in the middle moving the traffic.
+       The historical tier-1 names should dominate; movement here is industry news.</p>
+  </div>
+  <section class="panel">
+    <header class="phead">
+      <div class="windowtabs" role="tablist" aria-label="Time window">
+        {% for seconds, label in windows.items() %}
+        <button class="wtab{% if seconds == 21600 %} active{% endif %}" role="tab"
+                hx-get="/partials/dashboards/transit?window={{ seconds }}"
+                hx-target="#transitleague" hx-swap="innerHTML"
+                onclick="document.querySelectorAll('.wtab').forEach(b=>b.classList.remove('active'));this.classList.add('active')">
+          {{ label }}</button>
+        {% endfor %}
+      </div>
+      <span class="srctag"><span id="livebadge" class="livebadge connecting">connecting…</span> · prepend-deduplicated paths</span>
+    </header>
+    <div id="transitleague"
+         hx-get="/partials/dashboards/transit?window=21600"
+         hx-trigger="load, every 60s"
+         hx-swap="innerHTML">
+      <p class="loading">Loading…</p>
+    </div>
+  </section>
+  {% include "partials/_live_league.html" %}
+<style>
+  .windowtabs{display:flex;gap:4px}
+  .wtab{background:var(--inset);border:1px solid var(--line);color:var(--muted);
+    font:inherit;font-size:.75rem;padding:4px 10px;border-radius:var(--r);cursor:pointer}
+  .wtab:hover{color:var(--ink)}
+  .wtab.active{color:var(--ink);border-color:var(--accent)}
+  .uk-row td{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+  .uk-tag{font-size:.5625rem;font-family:var(--mono);color:var(--accent-ink);
+    border:1px solid var(--line-strong);border-radius:999px;padding:1px 6px;margin-left:6px;vertical-align:middle}
+  .sharebar{display:inline-block;width:110px;height:8px;background:var(--inset);
+    border:1px solid var(--line);border-radius:999px;overflow:hidden;vertical-align:middle;margin-right:8px}
+  .sharebar i{display:block;height:100%;background:var(--accent)}
+</style>
+{% endblock %}

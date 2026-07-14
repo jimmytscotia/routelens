@@ -278,3 +278,26 @@ def test_rpki_scores_upsert_and_list(tmp_path):
     assert bt["valid"] == 99
     assert bt["name"] == "British Telecommunications PLC"
     assert bt["checked_at"]
+
+
+def test_transit_league_and_path_stats(tmp_path):
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "transit.db")
+    store.init_schema()
+    store.upsert_asn_names([(3356, "Lumen", "US"), (1299, "Arelion", "SE")])
+    store.record_transit_bucket(bucket_ts="2026-07-14T13:00:00", asn=3356, paths=500)
+    store.record_transit_bucket(bucket_ts="2026-07-14T14:00:00", asn=3356, paths=300)
+    store.record_transit_bucket(bucket_ts="2026-07-14T13:00:00", asn=1299, paths=400)
+    store.record_path_stats(bucket_ts="2026-07-14T13:00:00", paths=1000, hops=4200)
+    store.record_path_stats(bucket_ts="2026-07-14T14:00:00", paths=500, hops=2000)
+
+    league = store.transit_league(since="2026-07-14T12:00:00", limit=5)
+    stats = store.path_stats(since="2026-07-14T12:00:00")
+
+    assert [row["asn"] for row in league] == [3356, 1299]
+    assert league[0]["paths"] == 800
+    assert league[0]["name"] == "Lumen"
+    assert stats == {"paths": 1500, "hops": 6200, "avg_len": 4.13}
+    assert store.prune_transit_activity(before="2026-07-14T13:30:00") == 2
+    assert store.prune_path_stats(before="2026-07-14T13:30:00") == 1

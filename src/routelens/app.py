@@ -282,6 +282,33 @@ def create_app(config: dict | None = None) -> Flask:
             "partials/origin_events.html", events=events, window_label=ORIGIN_WINDOWS[window]
         )
 
+    TRANSIT_WINDOWS = {3600: "1 hour", 21600: "6 hours", 86400: "24 hours"}
+
+    @app.get("/dashboards/transit")
+    def dashboard_transit():
+        return render_template("dashboards/transit.html", windows=TRANSIT_WINDOWS)
+
+    @app.get("/partials/dashboards/transit")
+    def partial_dashboard_transit():
+        from datetime import datetime, timedelta, timezone
+
+        try:
+            window = int(request.args.get("window", "21600"))
+        except ValueError:
+            abort(400)
+        if window not in TRANSIT_WINDOWS:
+            abort(400)
+        since = (datetime.now(timezone.utc) - timedelta(seconds=window)).strftime("%Y-%m-%dT%H:%M:%S")
+        rows = store.transit_league(since=since, limit=50)
+        stats = store.path_stats(since=since)
+        for rank, row in enumerate(rows, start=1):
+            row["rank"] = rank
+            row["share"] = round(100 * row["paths"] / stats["paths"], 1) if stats["paths"] else 0
+        return render_template(
+            "partials/transit_league.html", rows=rows, stats=stats,
+            window_label=TRANSIT_WINDOWS[window],
+        )
+
     @app.get("/dashboards/rpki")
     def dashboard_rpki():
         return render_template("dashboards/rpki.html")

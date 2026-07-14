@@ -128,11 +128,13 @@ with #1 and reuse it everywhere:
 4. Origin-change monitor — LIVE 2026-07-14 (stability+confirmation heuristics,
    hourly dedupe, flip-flop vs moved classification; aggregator MemoryMax
    raised to 384M for the 400k-entry origin map)
-5. RPKI scoreboard
+5. RPKI scoreboard — LIVE 2026-07-14 (RouteViews-scored UK operators +
+   top churners, hourly; Radar global panel token-gated)
 6. Address-space league (who owns the Internet, bgp.tools table dump)
 7. ASN profile pages
-8. Routing table growth tracker (RIPEstat historical, cheap win)
-9. Transit centrality (who carries the Internet)
+8. Routing table growth tracker — LIVE 2026-07-14 (potaroo daily, cached)
+9. Transit centrality — LIVE 2026-07-14 (middle-hop counts, prepend-dedup,
+   share of observed paths, avg path length)
 10. Country instability map
 
 ## UK / LINX focus (Jim, 2026-07-14)

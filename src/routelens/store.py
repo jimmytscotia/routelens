@@ -67,6 +67,19 @@ CREATE TABLE IF NOT EXISTS asn_names (
   country TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS ris_transit_activity (
+  bucket_ts TEXT NOT NULL,           -- hour bucket, ISO8601 UTC
+  asn INTEGER NOT NULL,              -- ASN seen as a transit hop
+  paths INTEGER NOT NULL DEFAULT 0,  -- announcement paths it appeared in
+  PRIMARY KEY (bucket_ts, asn)
+);
+
+CREATE TABLE IF NOT EXISTS ris_path_stats (
+  bucket_ts TEXT PRIMARY KEY,        -- hour bucket
+  paths INTEGER NOT NULL DEFAULT 0,  -- announcement paths observed
+  hops INTEGER NOT NULL DEFAULT 0    -- summed dedup path lengths
+);
+
 CREATE TABLE IF NOT EXISTS rpki_scores (
   asn INTEGER PRIMARY KEY,
   total INTEGER NOT NULL,
@@ -468,6 +481,66 @@ class RouteLensStore:
                 (since, limit),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def record_transit_bucket(self, *, bucket_ts: str, asn: int, paths: int) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO ris_transit_activity(bucket_ts, asn, paths)
+                VALUES (?, ?, ?)
+                ON CONFLICT(bucket_ts, asn) DO UPDATE SET paths = excluded.paths
+                """,
+                (bucket_ts, asn, paths),
+            )
+
+    def transit_league(self, *, since: str, limit: int = 50) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT t.asn,
+                       COALESCE(n.name, '') AS name,
+                       COALESCE(n.country, '') AS country,
+                       SUM(t.paths) AS paths
+                  FROM ris_transit_activity t
+                  LEFT JOIN asn_names n ON n.asn = t.asn
+                 WHERE t.bucket_ts >= ?
+                 GROUP BY t.asn
+                 ORDER BY paths DESC
+                 LIMIT ?
+                """,
+                (since, limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def prune_transit_activity(self, *, before: str) -> int:
+        with self.connect() as conn:
+            cur = conn.execute("DELETE FROM ris_transit_activity WHERE bucket_ts < ?", (before,))
+            return cur.rowcount
+
+    def record_path_stats(self, *, bucket_ts: str, paths: int, hops: int) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO ris_path_stats(bucket_ts, paths, hops) VALUES (?, ?, ?)
+                ON CONFLICT(bucket_ts) DO UPDATE
+                   SET paths = excluded.paths, hops = excluded.hops
+                """,
+                (bucket_ts, paths, hops),
+            )
+
+    def path_stats(self, *, since: str) -> dict[str, Any]:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(paths),0) AS paths, COALESCE(SUM(hops),0) AS hops FROM ris_path_stats WHERE bucket_ts >= ?",
+                (since,),
+            ).fetchone()
+        paths, hops = row["paths"], row["hops"]
+        return {"paths": paths, "hops": hops, "avg_len": round(hops / paths, 2) if paths else 0}
+
+    def prune_path_stats(self, *, before: str) -> int:
+        with self.connect() as conn:
+            cur = conn.execute("DELETE FROM ris_path_stats WHERE bucket_ts < ?", (before,))
+            return cur.rowcount
 
     def upsert_rpki_score(self, *, asn: int, total: int, valid: int, invalid: int, notfound: int) -> None:
         with self.connect() as conn:

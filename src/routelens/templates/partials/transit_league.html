@@ -1,0 +1,43 @@
+{% if rows %}
+<div class="kv" style="border-bottom:1px solid var(--line);margin-bottom:6px">
+  <span title="Announcement paths observed in the window, after removing AS-prepending">Paths observed</span>
+  <strong>{{ "{:,}".format(stats.paths) }} · avg length {{ stats.avg_len }} hops</strong>
+</div>
+<div class="tablewrap">
+<table class="datatable">
+  <thead>
+    <tr>
+      <th class="num" title="Rank by paths carried in the selected window">#</th>
+      <th title="The transit network. Click to open in the looking glass.">AS</th>
+      <th title="Operator name and registration country from bgp.tools">Operator</th>
+      <th title="Registration country of the ASN">CC</th>
+      <th class="num" title="Announcement paths in which this AS appeared as a middle (transit) hop — origin and collecting peer excluded, prepending counted once">Paths carried ({{ window_label }})</th>
+      <th title="Share of all observed paths that crossed this network">Share</th>
+    </tr>
+  </thead>
+  <tbody data-live="transit">
+  {% for row in rows %}
+    <tr data-key="{{ row.asn }}"{% if row.country == 'GB' %} class="uk-row"{% endif %}>
+      <td class="num mono c-rank">{{ row.rank }}</td>
+      <td class="mono"><a href="/q?query=AS{{ row.asn }}">AS{{ row.asn }}</a>{% if row.country == 'GB' %}<span class="uk-tag">UK</span>{% endif %}</td>
+      <td>{{ row.name or '—' }}</td>
+      <td class="mono">{{ row.country }}</td>
+      <td class="num mono c-path" data-v="{{ row.paths }}">{{ "{:,}".format(row.paths) }}</td>
+      <td>
+        <span class="sharebar" aria-hidden="true"><i style="width:{{ [row.share, 100]|min }}%"></i></span>
+        <span class="mono">{{ row.share }}%</span>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="attribution">Measured from BGP update paths, not traffic volume: a network can carry many routes
+   and little traffic or vice versa. Prepending is collapsed so path-stuffing doesn't move the table.</p>
+{% else %}
+<div class="empty">
+  <strong>No transit data yet.</strong>
+  <p>The RIS Live aggregator hasn't recorded transit buckets in this window.
+     If it was just upgraded, the first hourly bucket is still filling.</p>
+</div>
+{% endif %}

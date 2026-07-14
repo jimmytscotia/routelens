@@ -113,6 +113,9 @@ class ActivityAccumulator:
         self.flap_max_rows = flap_max_rows
         self.origin_tracker = OriginTracker()
         self._origin_events: list[dict] = []
+        # Transit centrality: (hour, asn) -> paths carried; (hour) -> totals.
+        self._transit_buckets: dict[tuple[str, int], int] = {}
+        self._path_stats: dict[str, dict[str, int]] = {}
 
     def ingest(self, data: dict) -> None:
         host = data.get("host") or ""
@@ -143,8 +146,19 @@ class ActivityAccumulator:
             for ann in data.get("announcements") or []:
                 abucket["prefixes"].update(ann.get("prefixes") or [])
 
-        # Per-prefix flap counting (hourly) + origin-change tracking.
+        # Transit centrality: count each AS once per announcement path,
+        # so prepending (64500 3356 3356 3356 …) doesn't inflate anyone.
         hour = _hour_bucket(float(ts))
+        if ann_prefixes and len(path) >= 2 and all(isinstance(a, int) for a in path):
+            dedup = list(dict.fromkeys(path))
+            for asn in dedup[1:-1]:  # middle hops: not the peer, not the origin
+                key = (hour, asn)
+                self._transit_buckets[key] = self._transit_buckets.get(key, 0) + 1
+            stats = self._path_stats.setdefault(hour, {"paths": 0, "hops": 0})
+            stats["paths"] += 1
+            stats["hops"] += len(dedup)
+
+        # Per-prefix flap counting (hourly) + origin-change tracking.
         for ann in data.get("announcements") or []:
             for prefix in ann.get("prefixes") or []:
                 pb = self._prefix_buckets.setdefault(
@@ -173,6 +187,12 @@ class ActivityAccumulator:
 
     def prefix_snapshot(self) -> dict[tuple[str, str], dict]:
         return dict(self._prefix_buckets)
+
+    def transit_snapshot(self) -> dict[tuple[str, int], int]:
+        return dict(self._transit_buckets)
+
+    def path_stats_snapshot(self) -> dict[str, dict[str, int]]:
+        return dict(self._path_stats)
 
     def flush(self, store: RouteLensStore, *, now_ts: float | None = None) -> int:
         """Write all buckets (idempotent upsert); drop completed periods from
@@ -225,6 +245,17 @@ class ActivityAccumulator:
             if bucket_ts < current_hour:
                 del self._prefix_buckets[(bucket_ts, prefix)]
 
+        for (bucket_ts, asn), paths in list(self._transit_buckets.items()):
+            store.record_transit_bucket(bucket_ts=bucket_ts, asn=asn, paths=paths)
+            written += 1
+            if bucket_ts < current_hour:
+                del self._transit_buckets[(bucket_ts, asn)]
+        for bucket_ts, stats in list(self._path_stats.items()):
+            store.record_path_stats(bucket_ts=bucket_ts, paths=stats["paths"], hops=stats["hops"])
+            written += 1
+            if bucket_ts < current_hour:
+                del self._path_stats[bucket_ts]
+
         # Confirmed origin-change events (rare: dozens per hour, not thousands).
         for event in self._origin_events:
             store.record_origin_event(
@@ -273,6 +304,8 @@ async def run(store: RouteLensStore) -> None:
                         removed += store.prune_asn_activity(before=cutoff)
                         removed += store.prune_prefix_activity(before=cutoff)
                         removed += store.prune_origin_events(before=cutoff)
+                        removed += store.prune_transit_activity(before=cutoff)
+                        removed += store.prune_path_stats(before=cutoff)
                         last_prune = now
                         log.info("pruned %d buckets older than %s", removed, cutoff)
                     if now - last_rpki >= RPKI_REFRESH_S:

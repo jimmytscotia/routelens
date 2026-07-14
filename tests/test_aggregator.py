@@ -228,3 +228,43 @@ def test_accumulator_records_confirmed_origin_changes_on_flush(tmp_path):
     assert events[0]["prefix"] == "203.0.113.0/24"
     assert events[0]["old_asn"] == 64500
     assert events[0]["new_asn"] == 64666
+
+
+def test_accumulator_folds_transit_hops_dedup_prepending():
+    acc = ActivityAccumulator()
+
+    # peer 64500 -> transit 3356, 1299 -> origin 15169
+    acc.ingest({**msg(T0 + 1, ann_prefixes=["192.0.2.0/24"]), "path": [64500, 3356, 1299, 15169]})
+    # Prepending: 3356 appears three times but counts once for this path.
+    acc.ingest({**msg(T0 + 2, ann_prefixes=["198.51.100.0/24"]), "path": [64501, 3356, 3356, 3356, 15169]})
+    # Two-hop path has no transit hops at all.
+    acc.ingest({**msg(T0 + 3, ann_prefixes=["203.0.113.0/24"]), "path": [64500, 15169]})
+    # Withdrawal-only: no path, ignored.
+    acc.ingest(msg(T0 + 4, wdr_prefixes=["203.0.113.0/24"]))
+
+    transit = acc.transit_snapshot()
+    stats = acc.path_stats_snapshot()
+
+    assert transit[("2026-07-14T13:00:00", 3356)] == 2
+    assert transit[("2026-07-14T13:00:00", 1299)] == 1
+    assert 15169 not in [asn for _, asn in transit]
+    assert 64500 not in [asn for _, asn in transit]
+    # Path stats: 3 announcement paths; dedup lengths 4 + 3 + 2 = 9 hops.
+    assert stats[("2026-07-14T13:00:00")] == {"paths": 3, "hops": 9}
+
+
+def test_flush_writes_transit_and_path_stats(tmp_path):
+    store = RouteLensStore(tmp_path / "agg9.db")
+    store.init_schema()
+    acc = ActivityAccumulator()
+    acc.ingest({**msg(T0 + 1, ann_prefixes=["192.0.2.0/24"]), "path": [64500, 3356, 15169]})
+    acc.ingest({**msg(T0 + 2, ann_prefixes=["198.51.100.0/24"]), "path": [64501, 3356, 15169]})
+
+    acc.flush(store, now_ts=T0 + 30)
+
+    league = store.transit_league(since="2026-07-14T00:00:00", limit=5)
+    assert league[0]["asn"] == 3356
+    assert league[0]["paths"] == 2
+    stats = store.path_stats(since="2026-07-14T00:00:00")
+    assert stats["paths"] == 2
+    assert stats["avg_len"] == 3.0

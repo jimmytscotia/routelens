@@ -12,7 +12,7 @@ DASHBOARDS = [
     {"slug": "address-space", "title": "Address space", "status": "planned"},
     {"slug": "asn-profiles", "title": "ASN profiles", "status": "planned"},
     {"slug": "table-growth", "title": "Table growth", "status": "live"},
-    {"slug": "transit", "title": "Transit centrality", "status": "planned"},
+    {"slug": "transit", "title": "Transit centrality", "status": "live"},
     {"slug": "countries", "title": "Country instability", "status": "planned"},
 ]
 

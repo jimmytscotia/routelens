@@ -28,7 +28,10 @@
   function tbody() { return document.querySelector('tbody[data-live]'); }
   function sortCls() {
     const mode = tbody()?.dataset.live;
-    return mode === 'rrc' ? 'c-upd' : (mode === 'prefix' ? 'c-evt' : 'c-ann');
+    if (mode === 'rrc') return 'c-upd';
+    if (mode === 'prefix') return 'c-evt';
+    if (mode === 'transit') return 'c-path';
+    return 'c-ann';
   }
   function pend(key) { return pending[key] || (pending[key] = {upd: 0, ann: 0, wdr: 0}); }
 
@@ -42,6 +45,14 @@
       // One message can touch several prefix rows.
       for (const pfx of annPrefixes) pend(pfx).ann += 1;
       for (const pfx of wdrPrefixes) pend(pfx).wdr += 1;
+      return;
+    }
+    if (mode === 'transit') {
+      const path = d.path || [];
+      if (!annPrefixes.length || path.length < 3 || !path.every(a => typeof a === 'number')) return;
+      // Dedup prepending, then count each middle hop once for this path.
+      const dedup = Array.from(new Set(path));
+      for (const asn of dedup.slice(1, -1)) pend(String(asn)).upd += 1;
       return;
     }
     let key;
@@ -84,11 +95,16 @@
       if (mode === 'rrc') {
         bump(row, 'c-upd', p.upd);
         bump(row, 'c-wdr', p.wdr);
+        bump(row, 'c-ann', p.ann);
       } else if (mode === 'prefix') {
         bump(row, 'c-wdr', p.wdr);
         bump(row, 'c-evt', p.ann + p.wdr);
+        bump(row, 'c-ann', p.ann);
+      } else if (mode === 'transit') {
+        bump(row, 'c-path', p.upd);
+      } else {
+        bump(row, 'c-ann', p.ann);
       }
-      bump(row, 'c-ann', p.ann);
       changed = true;
     }
     pending = {};

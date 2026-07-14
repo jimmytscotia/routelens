@@ -371,3 +371,38 @@ def test_table_growth_partial_degrades_on_error(tmp_path):
     body = app.test_client().get("/partials/dashboards/table-growth").data.decode()
 
     assert "potaroo unreachable" in body
+
+
+def test_transit_league_page_and_partial(tmp_path):
+    app = _app(tmp_path)
+    store = app.config["ROUTELENS_STORE"]
+    store.upsert_asn_names([(3356, "Lumen (Level 3)", "US"), (2856, "British Telecommunications PLC", "GB")])
+    store.record_transit_bucket(bucket_ts=_hour_bucket(0), asn=3356, paths=9000)
+    store.record_transit_bucket(bucket_ts=_hour_bucket(0), asn=2856, paths=1000)
+    store.record_path_stats(bucket_ts=_hour_bucket(0), paths=20000, hops=84000)
+    client = app.test_client()
+
+    page = client.get("/dashboards/transit")
+    assert page.status_code == 200
+    assert b"Transit centrality" in page.data
+
+    body = client.get("/partials/dashboards/transit?window=21600").data.decode()
+    assert body.index("AS3356") < body.index("AS2856")
+    assert "Lumen" in body
+    # Share of observed paths: 9000/20000 = 45%.
+    assert "45.0%" in body
+    # Average dedup path length: 84000/20000 = 4.2.
+    assert "4.2" in body
+    assert "uk-row" in body
+    assert 'data-live="transit"' in body
+    assert 'data-key="3356"' in body
+
+
+def test_transit_partial_empty_and_bad_window(tmp_path):
+    client = _app(tmp_path).test_client()
+
+    empty = client.get("/partials/dashboards/transit?window=21600")
+    assert empty.status_code == 200
+    assert "aggregator" in empty.data.decode().lower()
+
+    assert client.get("/partials/dashboards/transit?window=1").status_code == 400
