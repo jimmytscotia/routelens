@@ -1,0 +1,23 @@
+<header class="phead"><h2>NLNOG Ring · {{ result.data.route_count if result.ok else '?' }} routes from ISP routers</h2><span class="srctag">lg.ring.nlnog.net</span></header>
+{% if result.ok %}
+{% set d = result.data %}
+<div class="tablewrap">
+<table class="datatable">
+  <thead><tr><th>Peer</th><th>AS path (hover for names)</th><th>RPKI</th><th>Last update</th></tr></thead>
+  <tbody>
+  {% for route in d.routes %}
+    <tr>
+      <td class="mono">{{ route.peer }}</td>
+      <td class="mono">
+        {% for hop in route.aspath %}<span title="{{ hop[1] }}">{{ hop[0] }}</span>{% if not loop.last %} {% endif %}{% endfor %}
+      </td>
+      <td><span class="badge {{ 'valid' if route.rpki == 'valid' else ('unknown' if route.rpki == 'unknown' else 'invalid') }}">{{ route.rpki }}</span></td>
+      <td class="mono">{{ route.last_update_at }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="empty"><strong>NLNOG Ring unavailable.</strong><p>{{ result.error }}</p></div>
+{% endif %}

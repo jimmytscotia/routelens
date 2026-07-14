@@ -1,0 +1,218 @@
+import pytest
+
+from routelens.app import create_app
+
+
+class FakeSources:
+    """Stands in for SourceClient; returns canned summaries."""
+
+    def __init__(self):
+        self.calls = []
+
+    def ripestat_looking_glass(self, prefix):
+        self.calls.append(("lg", prefix))
+        return {
+            "ok": True,
+            "data": {
+                "rrc_count": 1,
+                "peer_count": 2,
+                "origins": [15169],
+                "query_time": "2026-07-14T10:00:00",
+                "rrcs": [
+                    {
+                        "rrc": "RRC01",
+                        "location": "London, United Kingdom",
+                        "scope": "LINX",
+                        "peer_count": 2,
+                        "origins": [15169],
+                        "sample_paths": [["3356", "15169"]],
+                        "last_updated": "2026-07-14T09:00:00",
+                    }
+                ],
+            },
+        }
+
+    def ripestat_routing_status(self, prefix):
+        self.calls.append(("routing", prefix))
+        return {
+            "ok": True,
+            "data": {
+                "resource": prefix,
+                "visibility_seeing": 110,
+                "visibility_total": 110,
+                "visibility_pct": 100,
+                "origins": [15169],
+                "first_seen": {"time": "2002-11-06T16:00:00", "origin": "21284"},
+                "last_seen": {"time": "2026-07-14T08:00:00", "origin": "15169"},
+                "less_specific_count": 2,
+                "more_specific_count": 0,
+            },
+        }
+
+    def ripestat_rpki(self, asn, prefix):
+        self.calls.append(("rpki", asn, prefix))
+        return {"ok": True, "data": {"status": "valid", "roa_count": 1, "roas": [], "prefix": prefix}}
+
+    def ripestat_network_info(self, ip):
+        self.calls.append(("netinfo", ip))
+        return {"ok": True, "data": {"asns": [15169], "prefix": "8.8.8.0/24"}}
+
+    def routeviews_prefix(self, prefix):
+        self.calls.append(("routeviews", prefix))
+        return {
+            "ok": True,
+            "data": {
+                "origin_asns": [15169],
+                "rpki_state": "valid",
+                "roa_count": 1,
+                "peer_count": 3,
+                "collectors": ["route-views.linx"],
+                "sample_paths": [["64500", "3356", "15169"]],
+            },
+        }
+
+    def nlnog_prefix(self, prefix):
+        self.calls.append(("nlnog", prefix))
+        return {
+            "ok": True,
+            "data": {
+                "prefix": prefix,
+                "route_count": 1,
+                "origins": [15169],
+                "routes": [
+                    {
+                        "peer": "a2b-ip01",
+                        "aspath": [["51088", "A2B - A2B IP B.V., NL"], ["15169", "GOOGLE - Google LLC, US"]],
+                        "rpki": "valid",
+                        "last_update_at": "2026-07-14 07:26:06 UTC",
+                    }
+                ],
+            },
+        }
+
+    def radar_events(self, kind="hijacks"):
+        self.calls.append(("radar", kind))
+        return {"ok": False, "unconfigured": True, "error": "CLOUDFLARE_RADAR_TOKEN not set"}
+
+    def globalping_create(self, target, **kwargs):
+        self.calls.append(("gp_create", target))
+        return {"ok": True, "data": {"id": "meas123", "probes": 3}}
+
+    def globalping_result(self, measurement_id):
+        self.calls.append(("gp_result", measurement_id))
+        return {"ok": True, "data": {"status": "finished", "probes": []}}
+
+
+@pytest.fixture
+def app(tmp_path):
+    app = create_app(
+        {
+            "DATABASE": str(tmp_path / "test.db"),
+            "TESTING": True,
+            "RESOLVER": lambda hostname: ["8.8.8.8"],
+        }
+    )
+    app.config["ROUTELENS_SOURCES"] = FakeSources()
+    return app
+
+
+@pytest.fixture
+def client(app):
+    return app.test_client()
+
+
+def test_query_page_for_prefix_renders_shell_with_panels(client):
+    response = client.get("/q?query=8.8.8.0/24")
+    body = response.data.decode()
+
+    assert response.status_code == 200
+    assert "8.8.8.0/24" in body
+    # Panels lazy-load through HTMX partial endpoints ("/" is legal unescaped
+    # in a query-string value; Jinja's urlencode leaves it as-is).
+    assert "/partials/prefix/lg?prefix=8.8.8.0/24" in body
+    assert "/partials/prefix/routing?prefix=8.8.8.0/24" in body
+    assert "/partials/prefix/routeviews?prefix=8.8.8.0/24" in body
+    assert "/partials/prefix/nlnog?prefix=8.8.8.0/24" in body
+
+
+def test_query_page_for_invalid_input_shows_error(client):
+    response = client.get("/q?query=not%20a%20thing!")
+    body = response.data.decode()
+
+    assert response.status_code == 200
+    assert "recognised" in body or "invalid" in body.lower()
+
+
+def test_query_page_for_hostname_resolves_and_shows_prefix_panels(client):
+    response = client.get("/q?query=dns.google")
+    body = response.data.decode()
+
+    assert response.status_code == 200
+    assert "dns.google" in body
+    assert "8.8.8.8" in body
+    assert "8.8.8.0/24" in body
+    # Hostname pages also get a Globalping reachability panel.
+    assert "globalping" in body.lower()
+
+
+def test_lg_partial_renders_collector_table(client):
+    response = client.get("/partials/prefix/lg?prefix=8.8.8.0/24")
+    body = response.data.decode()
+
+    assert response.status_code == 200
+    assert "RRC01" in body
+    assert "London" in body
+    assert "AS15169" in body
+
+
+def test_routing_partial_renders_visibility_and_rpki(client):
+    response = client.get("/partials/prefix/routing?prefix=8.8.8.0/24")
+    body = response.data.decode()
+
+    assert response.status_code == 200
+    assert "110" in body
+    assert "valid" in body.lower()
+
+
+def test_routeviews_partial_renders_collectors(client):
+    response = client.get("/partials/prefix/routeviews?prefix=8.8.8.0/24")
+    body = response.data.decode()
+
+    assert response.status_code == 200
+    assert "route-views.linx" in body
+
+
+def test_nlnog_partial_renders_named_paths(client):
+    response = client.get("/partials/prefix/nlnog?prefix=8.8.8.0/24")
+    body = response.data.decode()
+
+    assert response.status_code == 200
+    assert "GOOGLE" in body
+    assert "a2b-ip01" in body
+
+
+def test_radar_partial_degrades_when_unconfigured(client):
+    response = client.get("/partials/radar")
+    body = response.data.decode()
+
+    assert response.status_code == 200
+    assert "not configured" in body.lower()
+
+
+def test_globalping_api_create_and_poll(client, app):
+    created = client.post("/api/globalping", json={"target": "dns.google"})
+    assert created.status_code == 202
+    assert created.get_json()["data"]["id"] == "meas123"
+
+    polled = client.get("/api/globalping/meas123")
+    assert polled.status_code == 200
+    assert polled.get_json()["data"]["status"] == "finished"
+
+    calls = [c[0] for c in app.config["ROUTELENS_SOURCES"].calls]
+    assert "gp_create" in calls and "gp_result" in calls
+
+
+def test_globalping_api_rejects_invalid_target(client):
+    response = client.post("/api/globalping", json={"target": "not a target!"})
+
+    assert response.status_code == 400

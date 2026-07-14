@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}{{ raw or 'Query' }} · RouteLens{% endblock %}
+{% block body %}
+<main class="wrap">
+{% if kind == 'invalid' %}
+  <div class="pagehead"><h1>Looking glass</h1></div>
+  <section class="panel">
+    <div class="empty">
+      <strong>Input not recognised.</strong>
+      <p>Try a prefix (<code>8.8.8.0/24</code>), an IP (<code>1.1.1.1</code>), an ASN (<code>AS13335</code>) or a hostname (<code>dns.google</code>).</p>
+    </div>
+  </section>
+{% else %}
+  <div class="pagehead">
+    <h1 class="mono">{{ raw }}</h1>
+    <p>
+      {{ kind }}
+      {% if kind == 'hostname' and resolved_ips %} · resolves to <span class="mono">{{ resolved_ips|join(', ') }}</span>{% endif %}
+      {% if prefix and kind != 'prefix' %} · covering prefix <a class="mono" href="/q?query={{ prefix|urlencode }}">{{ prefix }}</a>{% endif %}
+      {% if asns %} · origin {% for a in asns %}<span class="mono">AS{{ a }}</span> {% endfor %}{% endif %}
+    </p>
+  </div>
+
+  {% if kind == 'hostname' and not resolved_ips %}
+  <section class="panel">
+    <div class="empty"><strong>Did not resolve.</strong><p>No public A record was returned for this hostname.</p></div>
+  </section>
+  {% endif %}
+
+  {% if kind == 'hostname' and resolved_ips %}
+  <section class="panel" id="globalping-panel" data-globalping-target="{{ value }}">
+    <header class="phead"><h2>Worldwide reachability</h2><span class="srctag">globalping.io</span></header>
+    <div id="globalping-results"><p class="loading">Launching probes…</p></div>
+  </section>
+  {% endif %}
+
+  {% if prefix %}
+  <div class="panelgrid">
+    <section class="panel" hx-get="/partials/prefix/routing?prefix={{ prefix|urlencode }}" hx-trigger="load" hx-swap="innerHTML">
+      <header class="phead"><h2>Routing status</h2><span class="srctag">stat.ripe.net</span></header><p class="loading">Loading…</p>
+    </section>
+    <section class="panel" hx-get="/partials/prefix/routeviews?prefix={{ prefix|urlencode }}" hx-trigger="load" hx-swap="innerHTML">
+      <header class="phead"><h2>RouteViews</h2><span class="srctag">api.routeviews.org</span></header><p class="loading">Loading…</p>
+    </section>
+  </div>
+  <section class="panel" hx-get="/partials/prefix/lg?prefix={{ prefix|urlencode }}" hx-trigger="load" hx-swap="innerHTML">
+    <header class="phead"><h2>RIS looking glass</h2><span class="srctag">stat.ripe.net</span></header><p class="loading">Loading…</p>
+  </section>
+  <section class="panel" hx-get="/partials/prefix/nlnog?prefix={{ prefix|urlencode }}" hx-trigger="load" hx-swap="innerHTML">
+    <header class="phead"><h2>NLNOG Ring</h2><span class="srctag">lg.ring.nlnog.net</span></header><p class="loading">Loading…</p>
+  </section>
+  <section class="panel" id="live-prefix" data-prefix="{{ prefix }}">
+    <header class="phead"><h2>Live updates for this prefix</h2><span class="conn connecting mono" id="conn" style="font-size:.6875rem">connecting…</span></header>
+    <ul id="ticker" class="mono" style="list-style:none;margin:0;padding:0;font-size:.75rem" aria-label="Live BGP updates for this prefix"></ul>
+    <p class="attribution" id="live-quiet">Quiet is healthy — a stable prefix only generates updates when routing actually changes.</p>
+  </section>
+  {% elif kind == 'asn' %}
+  <section class="panel">
+    <header class="phead"><h2 class="mono">AS{{ value }}</h2><span class="srctag">coming soon</span></header>
+    <div class="empty"><strong>ASN detail view is coming in phase 2.</strong>
+      <p>Query one of this network's prefixes directly in the meantime.</p></div>
+  </section>
+  {% endif %}
+{% endif %}
+</main>
+
+{% if kind == 'hostname' and resolved_ips %}
+<script>
+(function () {
+  const panel = document.getElementById('globalping-panel');
+  const out = document.getElementById('globalping-results');
+  fetch('/api/globalping', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({target: panel.dataset.globalpingTarget}),
+  })
+    .then(r => r.json())
+    .then(created => {
+      if (!created.ok) { out.innerHTML = '<p class="err">Globalping unavailable</p>'; return; }
+      const poll = () => fetch('/api/globalping/' + created.data.id)
+        .then(r => r.json())
+        .then(res => {
+          if (!res.ok) { out.innerHTML = '<p class="err">Globalping unavailable</p>'; return; }
+          renderProbes(res.data.probes);
+          if (res.data.status !== 'finished') setTimeout(poll, 1500);
+        });
+      poll();
+    });
+  function renderProbes(probes) {
+    if (!probes.length) { out.innerHTML = '<p class="loading">Waiting for probes…</p>'; return; }
+    out.innerHTML = '<div class="tablewrap"><table class="datatable"><thead><tr><th>Probe</th><th>Network</th><th>Avg RTT</th><th>Loss</th></tr></thead><tbody>' +
+      probes.map(p => {
+        const s = p.stats || {};
+        const rtt = s.avg != null ? s.avg.toFixed(1) + ' ms' : '—';
+        const loss = s.loss != null ? s.loss + '%' : '—';
+        return `<tr><td>${p.city || '?'}, ${p.country || '?'}</td><td class="mono">AS${p.asn || '?'}</td><td class="num mono">${rtt}</td><td class="num mono">${loss}</td></tr>`;
+      }).join('') + '</tbody></table></div>';
+  }
+})();
+</script>
+{% endif %}
+
+{% if prefix %}
+<script>
+(function () {
+  'use strict';
+  const prefix = document.getElementById('live-prefix').dataset.prefix;
+  const ticker = document.getElementById('ticker');
+  const quiet = document.getElementById('live-quiet');
+  const conn = document.getElementById('conn');
+  let ws, retryMs = 1000;
+  function connect() {
+    ws = new WebSocket('wss://ris-live.ripe.net/v1/ws/?client=routelens-query');
+    ws.onopen = () => {
+      retryMs = 1000;
+      conn.className = 'conn up mono'; conn.textContent = 'live';
+      ws.send(JSON.stringify({type: 'ris_subscribe', data: {prefix, moreSpecific: true, type: 'UPDATE'}}));
+    };
+    ws.onmessage = ev => {
+      const msg = JSON.parse(ev.data);
+      if (msg.type !== 'ris_message') return;
+      quiet.style.display = 'none';
+      const d = msg.data;
+      const anns = (d.announcements || []).flatMap(a => a.prefixes || []);
+      const kind = anns.length ? 'ANN' : 'WDR';
+      const li = document.createElement('li');
+      li.style.cssText = 'padding:4px 0;border-bottom:1px solid var(--line)';
+      li.innerHTML = `<span style="color:${kind === 'ANN' ? 'var(--ok)' : 'var(--crit)'}">${kind}</span> ` +
+        `<span style="color:var(--faint)">${(d.host || '').split('.')[0]}</span> peer AS${d.peer_asn}` +
+        (d.path ? ` <span style="color:var(--muted)">via ${d.path.join(' ')}</span>` : '');
+      ticker.prepend(li);
+      while (ticker.children.length > 20) ticker.lastChild.remove();
+    };
+    ws.onclose = () => {
+      conn.className = 'conn down mono'; conn.textContent = 'reconnecting…';
+      setTimeout(connect, retryMs);
+      retryMs = Math.min(retryMs * 2, 30000);
+    };
+    ws.onerror = () => ws.close();
+  }
+  connect();
+})();
+</script>
+<style>
+  .conn.up{color:var(--ok)} .conn.down{color:var(--crit)} .conn.connecting{color:var(--warn)}
+</style>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,259 @@
+import pytest
+
+from routelens.store import RouteLensStore
+from routelens import sources
+from routelens.sources import SourceClient
+
+
+@pytest.fixture
+def store(tmp_path):
+    s = RouteLensStore(tmp_path / "sources.db")
+    s.init_schema()
+    return s
+
+
+class FakeResponse:
+    def __init__(self, payload, status=200):
+        self._payload = payload
+        self.status_code = status
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise sources.requests.HTTPError(f"HTTP {self.status_code}")
+
+
+ROUTEVIEWS_PAYLOAD = [
+    {
+        "prefix": "8.8.8.0/24",
+        "origin_asn": 15169,
+        "rpki_state": "valid",
+        "rpki_roas": [{"prefix": "8.8.8.0/24", "ta": "arin", "asn": 15169, "max_length": 24}],
+        "reporting_peers": [
+            {"peer_asn": 30844, "collector": "route-views.napafrica", "as_path": "30844 15169"},
+            {"peer_asn": 37105, "collector": "route-views.napafrica", "as_path": "37105 15169"},
+            {"peer_asn": 64500, "collector": "route-views.linx", "as_path": "64500 3356 15169"},
+        ],
+    }
+]
+
+
+def test_routeviews_prefix_summarises_and_caches(store, monkeypatch):
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        return FakeResponse(ROUTEVIEWS_PAYLOAD)
+
+    monkeypatch.setattr(sources.requests, "get", fake_get)
+    client = SourceClient(store)
+
+    result = client.routeviews_prefix("8.8.8.0/24")
+
+    assert result["ok"] is True
+    assert result["data"]["origin_asns"] == [15169]
+    assert result["data"]["rpki_state"] == "valid"
+    assert result["data"]["peer_count"] == 3
+    assert result["data"]["collectors"] == ["route-views.linx", "route-views.napafrica"]
+    assert ["64500", "3356", "15169"] in result["data"]["sample_paths"]
+
+    # Second call is served from cache: no extra HTTP request.
+    again = client.routeviews_prefix("8.8.8.0/24")
+    assert again["ok"] is True
+    assert len(calls) == 1
+
+
+NLNOG_PAYLOAD = {
+    "prefix": "8.8.8.0/24",
+    "routes": {
+        "8.8.8.0/24": [
+            {
+                "aspath": [["51088", "A2B - A2B IP B.V., NL"], ["15169", "GOOGLE - Google LLC, US"]],
+                "ovs": "valid",
+                "peer": "a2b-ip01",
+                "last_update_at": "2026-07-14 07:26:06 UTC",
+            },
+            {
+                "aspath": [["1299", "TWELVE99 Arelion, EU"], ["15169", "GOOGLE - Google LLC, US"]],
+                "ovs": "valid",
+                "peer": "arelion01",
+                "last_update_at": "2026-07-14 06:00:00 UTC",
+            },
+        ]
+    },
+}
+
+
+def test_nlnog_prefix_summarises_routes(store, monkeypatch):
+    monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse(NLNOG_PAYLOAD))
+    client = SourceClient(store)
+
+    result = client.nlnog_prefix("8.8.8.0/24")
+
+    assert result["ok"] is True
+    assert result["data"]["route_count"] == 2
+    first = result["data"]["routes"][0]
+    assert first["aspath"] == [["51088", "A2B - A2B IP B.V., NL"], ["15169", "GOOGLE - Google LLC, US"]]
+    assert first["rpki"] == "valid"
+    assert result["data"]["origins"] == [15169]
+
+
+def test_source_error_is_reported_not_raised(store, monkeypatch):
+    def boom(url, **kwargs):
+        raise sources.requests.ConnectionError("no route to host")
+
+    monkeypatch.setattr(sources.requests, "get", boom)
+    client = SourceClient(store)
+
+    result = client.nlnog_prefix("8.8.8.0/24")
+
+    assert result["ok"] is False
+    assert "no route to host" in result["error"]
+
+
+def test_globalping_create_and_result(store, monkeypatch):
+    def fake_post(url, **kwargs):
+        assert kwargs["json"]["target"] == "nexthop.engineer"
+        return FakeResponse({"id": "meas123", "probesCount": 3}, status=202)
+
+    result_payload = {
+        "status": "finished",
+        "results": [
+            {
+                "probe": {"city": "Falkenstein", "country": "DE", "asn": 24940,
+                          "latitude": 50.48, "longitude": 12.37},
+                "result": {"stats": {"avg": 5.2, "loss": 0}},
+            }
+        ],
+    }
+    monkeypatch.setattr(sources.requests, "post", fake_post)
+    monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse(result_payload))
+    client = SourceClient(store)
+
+    created = client.globalping_create("nexthop.engineer")
+    assert created["ok"] is True
+    assert created["data"]["id"] == "meas123"
+
+    fetched = client.globalping_result("meas123")
+    assert fetched["ok"] is True
+    assert fetched["data"]["status"] == "finished"
+    probe = fetched["data"]["probes"][0]
+    assert probe["city"] == "Falkenstein"
+    assert probe["lat"] == 50.48
+    assert probe["stats"]["avg"] == 5.2
+
+
+def test_radar_events_without_token_reports_unconfigured(store, monkeypatch):
+    monkeypatch.delenv("CLOUDFLARE_RADAR_TOKEN", raising=False)
+    client = SourceClient(store)
+
+    result = client.radar_events()
+
+    assert result["ok"] is False
+    assert result["unconfigured"] is True
+
+
+def test_radar_events_with_token_summarises(store, monkeypatch):
+    monkeypatch.setenv("CLOUDFLARE_RADAR_TOKEN", "test-token")
+    payload = {
+        "success": True,
+        "result": {
+            "events": [
+                {
+                    "id": 1001,
+                    "event_type": 1,
+                    "prefixes": ["203.0.113.0/24"],
+                    "detected_origin_as_descriptions": ["EVIL-AS"],
+                    "expected_origin_as_numbers": [64500],
+                    "detected_origin_as_numbers": [64666],
+                    "max_hijack_ts": "2026-07-14T09:00:00Z",
+                    "confidence_score": 8,
+                }
+            ]
+        },
+    }
+    seen = {}
+
+    def fake_get(url, **kwargs):
+        seen["auth"] = kwargs["headers"]["Authorization"]
+        return FakeResponse(payload)
+
+    monkeypatch.setattr(sources.requests, "get", fake_get)
+    client = SourceClient(store)
+
+    result = client.radar_events()
+
+    assert result["ok"] is True
+    assert seen["auth"] == "Bearer test-token"
+    assert result["data"]["events"][0]["prefixes"] == ["203.0.113.0/24"]
+
+
+def test_ripestat_looking_glass_summarises_and_caches(store, monkeypatch):
+    payload = {
+        "data": {
+            "rrcs": [
+                {
+                    "rrc": "RRC01",
+                    "location": "London, United Kingdom",
+                    "peers": [{"asn_origin": "15169", "as_path": "3356 15169", "last_updated": "2026-07-14T09:00:00"}],
+                }
+            ],
+            "query_time": "2026-07-14T10:00:00",
+        }
+    }
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append((url, kwargs.get("params")))
+        return FakeResponse(payload)
+
+    monkeypatch.setattr(sources.requests, "get", fake_get)
+    client = SourceClient(store)
+
+    result = client.ripestat_looking_glass("8.8.8.0/24")
+
+    assert result["ok"] is True
+    assert result["data"]["rrc_count"] == 1
+    assert result["data"]["rrcs"][0]["rrc"] == "RRC01"
+    # sourceapp identifier is sent, per RIPEstat usage policy.
+    assert calls[0][1]["sourceapp"] == "routelens"
+
+    client.ripestat_looking_glass("8.8.8.0/24")
+    assert len(calls) == 1
+
+
+def test_ripestat_routing_status_and_rpki(store, monkeypatch):
+    routing_payload = {
+        "data": {
+            "resource": "8.8.8.0/24",
+            "visibility": {"v4": {"ris_peers_seeing": 110, "total_ris_peers": 110}, "v6": {}},
+            "origins": [{"origin": 15169}],
+        }
+    }
+    rpki_payload = {"data": {"status": "valid", "validating_roas": [], "prefix": "8.8.8.0/24"}}
+
+    def fake_get(url, **kwargs):
+        return FakeResponse(rpki_payload if "rpki-validation" in url else routing_payload)
+
+    monkeypatch.setattr(sources.requests, "get", fake_get)
+    client = SourceClient(store)
+
+    routing = client.ripestat_routing_status("8.8.8.0/24")
+    rpki = client.ripestat_rpki(15169, "8.8.8.0/24")
+
+    assert routing["data"]["visibility_pct"] == 100
+    assert routing["data"]["origins"] == [15169]
+    assert rpki["data"]["status"] == "valid"
+
+
+def test_ripestat_network_info(store, monkeypatch):
+    payload = {"data": {"asns": ["15169"], "prefix": "8.8.8.0/24"}}
+    monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse(payload))
+    client = SourceClient(store)
+
+    result = client.ripestat_network_info("8.8.8.8")
+
+    assert result["data"]["asns"] == [15169]
+    assert result["data"]["prefix"] == "8.8.8.0/24"

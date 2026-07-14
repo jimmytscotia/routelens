@@ -3,73 +3,76 @@
 {% block body %}
 {% set bgp = latest.get('bgp') if latest else none %}
 {% set sample_paths = bgp.details.get('sample_paths') if bgp else none %}
-<header class="hero wrap compact">
-  <div class="eyebrow">Resource telemetry</div>
-  <h1>{{ resource.name }}</h1>
-  <p>{{ resource.resource_type }} monitored as <strong>{{ resource.expected_mode }}</strong>. RouteLens keeps the raw evidence visible so the blog story can show not just pass/fail, but why.</p>
-</header>
-<main class="wrap detail">
-  <aside class="panel">
-    <div class="eyebrow">Expected state</div>
-    <h2>Control plane intent</h2>
-    <div class="kv"><span>Type</span><strong>{{ resource.resource_type }}</strong></div>
-    <div class="kv"><span>Mode</span><strong>{{ resource.expected_mode }}</strong></div>
-    {% if resource.expected_ips %}<div class="kv"><span>Expected IPs</span><strong>{{ resource.expected_ips|join(', ') }}</strong></div>{% endif %}
-    {% if resource.expected_origin_asn %}<div class="kv"><span>Expected origin</span><strong>AS{{ resource.expected_origin_asn }}</strong></div>{% endif %}
-    {% if resource.expected_url %}<div class="kv"><span>URL</span><strong>{{ resource.expected_url }}</strong></div>{% endif %}
-    <a class="link" href="/">← Back to dashboard</a>
-  </aside>
-  <section class="panel">
-    <div class="eyebrow">Latest evidence</div>
-    <h2>Check snapshots</h2>
-    {% if latest %}
-      <div class="checks detailchecks">
-      {% for kind, check in latest.items() %}
-        <article class="checkrow">
-          <div class="checkhead">
-            <strong>{{ kind }}</strong>
-            <span class="badge {{ check.status }}">{{ check.status }}</span>
+<main class="wrap">
+  <div class="pagehead">
+    <h1 class="mono">{{ resource.name }}</h1>
+    <p>{{ resource.resource_type }} watched as <span class="mono">{{ resource.expected_mode }}</span>
+       {% if resource.resource_type == 'prefix' %}· <a href="/q?query={{ resource.name|urlencode }}">open in looking glass</a>{% endif %}</p>
+  </div>
+
+  <div class="pulsegrid" style="display:grid;grid-template-columns:300px minmax(0,1fr);gap:14px;align-items:start">
+    <section class="panel">
+      <header class="phead"><h2>Expected state</h2><span class="srctag">intent</span></header>
+      <div class="kv"><span>Type</span><strong>{{ resource.resource_type }}</strong></div>
+      <div class="kv"><span>Mode</span><strong>{{ resource.expected_mode }}</strong></div>
+      {% if resource.expected_ips %}<div class="kv"><span>Expected IPs</span><strong>{{ resource.expected_ips|join(', ') }}</strong></div>{% endif %}
+      {% if resource.expected_origin_asn %}<div class="kv"><span>Expected origin</span><strong>AS{{ resource.expected_origin_asn }}</strong></div>{% endif %}
+      {% if resource.expected_url %}<div class="kv"><span>URL</span><strong>{{ resource.expected_url }}</strong></div>{% endif %}
+    </section>
+
+    <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+      <section class="panel">
+        <header class="phead"><h2>Latest evidence</h2><span class="srctag">collector · every 15 min</span></header>
+        {% if latest %}
+          {% for kind, check in latest.items() %}
+          <details {% if loop.first %}open{% endif %} style="border-bottom:1px solid var(--line);padding:6px 0">
+            <summary style="cursor:pointer;display:flex;gap:10px;align-items:center;list-style:none">
+              <span class="mono" style="min-width:56px">{{ kind }}</span>
+              <span class="badge {{ check.status }}">{{ check.status }}</span>
+              <span style="color:var(--muted);font-size:.8125rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ check.summary }}</span>
+            </summary>
+            <div class="attribution">Checked at {{ check.checked_at }}</div>
+            <pre class="pre">{{ check.details | tojson(indent=2) }}</pre>
+          </details>
+          {% endfor %}
+        {% else %}
+          <div class="empty">
+            <strong>No telemetry yet.</strong>
+            <p>Run the collector to populate DNS, HTTP, TLS or BGP evidence for this resource.</p>
           </div>
-          <p>{{ check.summary }}</p>
-          <div class="rtype">Checked at {{ check.checked_at }}</div>
-          <pre class="pre">{{ check.details | tojson(indent=2) }}</pre>
-        </article>
-      {% endfor %}
-      </div>
-    {% else %}
-      <div class="empty">
-        <strong>No telemetry yet.</strong>
-        <p>Run the collector to populate DNS, HTTP, TLS, or BGP evidence for this resource.</p>
-      </div>
-    {% endif %}
-  </section>
-  {% if sample_paths %}
-  <section class="panel bgp-paths">
-    <div class="eyebrow">RIPEstat BGP</div>
-    <h2>AS path visualisation</h2>
-    <p>How {{ resource.name }} is reached across RIPE route collectors. Each row is a sample AS path from a collector peer to the origin AS; the final hop is the announcing origin.</p>
-    <ol class="paths">
-      {% for path in sample_paths %}
-      <li class="path">
-        {% for asn in path %}
-        {% set is_origin = loop.last %}
-        <span class="hop{% if is_origin %} origin{% endif %}"{% if is_origin %} title="origin AS"{% endif %}>AS{{ asn }}{% if is_origin %} <span class="hoptag">origin</span>{% endif %}</span>
-        {% if not loop.last %}<span class="arrow" aria-hidden="true">→</span>{% endif %}
-        {% endfor %}
-      </li>
-      {% endfor %}
-    </ol>
-  </section>
-  {% endif %}
+        {% endif %}
+      </section>
+
+      {% if sample_paths %}
+      <section class="panel bgp-paths">
+        <header class="phead"><h2>AS path visualisation</h2><span class="srctag">RIPE RIS via RIPEstat</span></header>
+        <p style="color:var(--muted);font-size:.8125rem;margin:0 0 10px">Sample AS paths from route
+           collector peers to {{ resource.name }}. The final hop is the announcing origin.</p>
+        <ol class="paths">
+          {% for path in sample_paths %}
+          <li class="path">
+            {% for asn in path %}
+            {% set is_origin = loop.last %}
+            <span class="hop{% if is_origin %} origin{% endif %}"{% if is_origin %} title="origin AS"{% endif %}>AS{{ asn }}{% if is_origin %} <span class="hoptag">origin</span>{% endif %}</span>
+            {% if not loop.last %}<span class="arrow" aria-hidden="true">→</span>{% endif %}
+            {% endfor %}
+          </li>
+          {% endfor %}
+        </ol>
+      </section>
+      {% endif %}
+    </div>
+  </div>
 </main>
 {% if sample_paths %}
 <style>
-  .bgp-paths .paths{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column;gap:12px}
-  .bgp-paths .path{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
-  .bgp-paths .hop{font-family:'Azeret Mono',monospace;font-size:13px;letter-spacing:.02em;padding:7px 12px;border-radius:10px;border:1px solid rgba(0,153,255,.28);background:rgba(0,153,255,.08);color:#dff2ff;white-space:nowrap}
-  .bgp-paths .hop.origin{border-color:rgba(70,230,155,.55);background:rgba(70,230,155,.12);color:#c7ffe4}
-  .bgp-paths .hoptag{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:#46e69b;margin-left:4px}
-  .bgp-paths .arrow{color:#5ee4ff;font-size:15px;opacity:.75}
+  .bgp-paths .paths{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+  .bgp-paths .path{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+  .bgp-paths .hop{font-family:var(--mono);font-size:.75rem;padding:4px 9px;border-radius:var(--r);
+    border:1px solid var(--line-strong);background:var(--inset);color:var(--ink);white-space:nowrap}
+  .bgp-paths .hop.origin{border-color:color-mix(in srgb,var(--ok) 45%,transparent);color:var(--ok)}
+  .bgp-paths .hoptag{font-size:.5625rem;text-transform:uppercase;letter-spacing:.08em}
+  .bgp-paths .arrow{color:var(--faint);font-size:.8125rem}
 </style>
 {% endif %}
 {% endblock %}

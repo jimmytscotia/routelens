@@ -24,4 +24,4 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 
 [tool.setuptools.package-data]
-routelens = ["templates/*.html"]
+routelens = ["templates/*.html", "templates/partials/*.html"]

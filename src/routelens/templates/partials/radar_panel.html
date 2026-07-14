@@ -1,0 +1,28 @@
+<header class="phead"><h2>Detected hijack events</h2><span class="srctag">Cloudflare Radar</span></header>
+{% if result.ok %}
+{% if result.data.events %}
+<div class="tablewrap">
+<table class="datatable">
+  <thead><tr><th>Prefixes</th><th>Expected origin</th><th>Detected origin</th><th class="num">Confidence</th><th>Last seen</th></tr></thead>
+  <tbody>
+  {% for e in result.data.events %}
+    <tr>
+      <td class="mono">{{ e.prefixes|join(', ') }}</td>
+      <td class="mono">{% for a in e.expected_origin_as_numbers %}AS{{ a }} {% endfor %}</td>
+      <td class="mono">{% for a in e.detected_origin_as_numbers %}AS{{ a }} {% endfor %}</td>
+      <td class="num mono">{{ e.confidence_score }}</td>
+      <td class="mono">{{ e.max_hijack_ts }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="attribution">Data: Cloudflare Radar (CC BY-NC 4.0)</p>
+{% else %}
+<div class="empty"><strong>No recent hijack events.</strong></div>
+{% endif %}
+{% elif result.unconfigured %}
+<div class="empty"><strong>Radar feed not configured.</strong><p>Set <code>CLOUDFLARE_RADAR_TOKEN</code> to enable the global hijack event feed.</p></div>
+{% else %}
+<div class="empty"><strong>Cloudflare Radar unavailable.</strong><p>{{ result.error }}</p></div>
+{% endif %}

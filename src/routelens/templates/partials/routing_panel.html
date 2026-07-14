@@ -1,0 +1,13 @@
+<header class="phead"><h2>Routing status</h2><span class="srctag">stat.ripe.net</span></header>
+{% if routing.ok %}
+{% set d = routing.data %}
+<div class="kv"><span>RIS visibility</span><strong>{{ d.visibility_seeing }} / {{ d.visibility_total }} peers ({{ d.visibility_pct }}%)</strong></div>
+<div class="kv"><span>Origin</span><strong>{% for a in d.origins %}AS{{ a }} {% else %}none{% endfor %}</strong></div>
+{% if rpki and rpki.ok %}
+<div class="kv"><span>RPKI</span><strong><span class="badge {{ 'valid' if rpki.data.status == 'valid' else 'invalid' }}">{{ rpki.data.status }}</span> · {{ rpki.data.roa_count }} ROA{{ 's' if rpki.data.roa_count != 1 }}</strong></div>
+{% endif %}
+{% if d.first_seen %}<div class="kv"><span>First seen</span><strong>{{ d.first_seen.time }} (AS{{ d.first_seen.origin }})</strong></div>{% endif %}
+<div class="kv"><span>Specifics</span><strong>{{ d.less_specific_count }} less / {{ d.more_specific_count }} more</strong></div>
+{% else %}
+<div class="empty"><strong>RIPEstat unavailable.</strong><p>{{ routing.error }}</p></div>
+{% endif %}

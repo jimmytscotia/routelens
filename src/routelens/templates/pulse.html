@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% block title %}RouteLens · live BGP pulse{% endblock %}
+{% block extra_head %}
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" defer></script>
+<style>
+  .pulsegrid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:14px;align-items:start}
+  @media (max-width: 980px){.pulsegrid{grid-template-columns:1fr}}
+  #pulse-map{height:520px;border-radius:var(--r);border:1px solid var(--line);background:var(--inset)}
+  .maplibregl-ctrl-attrib{background:rgba(11,14,19,.75)!important;color:var(--faint)}
+  .maplibregl-ctrl-attrib a{color:var(--muted)!important}
+
+  .counters{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px}
+  .counter{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 14px}
+  .counter b{display:block;font-family:var(--mono);font-size:1.5rem;font-weight:600;
+    font-variant-numeric:tabular-nums;line-height:1.2}
+  .counter span{color:var(--muted);font-size:.75rem}
+  .counter .sub{color:var(--faint);font-family:var(--mono);font-size:.6875rem}
+
+  #ticker{list-style:none;margin:0;padding:0;font-family:var(--mono);font-size:.75rem;
+    max-height:520px;overflow-y:auto;overscroll-behavior:contain}
+  #ticker li{display:flex;gap:8px;padding:5px 2px;border-bottom:1px solid var(--line);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  @media (prefers-reduced-motion: no-preference){
+    #ticker li{animation:tickin .25s ease-out}
+    @keyframes tickin{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
+  }
+  #ticker .t-ann{color:var(--ok)} #ticker .t-wdr{color:var(--crit)}
+  #ticker .t-rrc{color:var(--faint)} #ticker .t-pfx{color:var(--ink)}
+  #ticker .t-path{color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+  .tickerhead .conn{font-family:var(--mono);font-size:.6875rem}
+  .conn.up{color:var(--ok)} .conn.down{color:var(--crit)} .conn.connecting{color:var(--warn)}
+
+  .marker{width:10px;height:10px;border-radius:50%;background:var(--accent);
+    border:1px solid #cfeaff;cursor:pointer}
+  .marker.flash{background:#fff;box-shadow:0 0 0 6px rgba(56,168,255,.35)}
+  @media (prefers-reduced-motion: no-preference){
+    .marker{transition:box-shadow .5s ease-out,background .5s ease-out}
+  }
+</style>
+{% endblock %}
+{% block body %}
+<main class="wrap">
+  <div class="pagehead">
+    <h1>Live BGP pulse</h1>
+    <p>Real-time route announcements and withdrawals streaming from RIPE RIS collectors worldwide
+       over <span class="mono">wss://ris-live.ripe.net</span>. Query any prefix, IP, ASN or hostname above.</p>
+  </div>
+
+  <div class="counters" aria-live="off">
+    <div class="counter"><b id="c-total">0</b><span>BGP updates since page load</span></div>
+    <div class="counter"><b id="c-rate">0</b><span>updates / second</span><span class="sub" id="c-rate-peak"></span></div>
+    <div class="counter"><b id="c-ann">0</b><span>announcements</span></div>
+    <div class="counter"><b id="c-wdr">0</b><span>withdrawals</span></div>
+    <div class="counter"><b id="c-rrcs">0<span class="sub">/23</span></b><span>collectors heard from</span></div>
+  </div>
+
+  <div class="pulsegrid">
+    <div id="pulse-map" aria-label="World map of RIPE RIS route collectors"></div>
+    <section class="panel">
+      <header class="phead tickerhead">
+        <h2>Update feed</h2>
+        <span class="conn connecting" id="conn">connecting…</span>
+      </header>
+      <ul id="ticker" aria-label="Live BGP update feed"></ul>
+    </section>
+  </div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const state = {
+    total: 0, ann: 0, wdr: 0, peak: 0,
+    rrcsSeen: new Set(),
+    window: [],           // timestamps of recent messages for rate calc
+    markers: {},          // rrc id -> {marker, el, timeout}
+  };
+  const $ = id => document.getElementById(id);
+
+  // ---- map ----------------------------------------------------------------
+  let map = null;
+  function initMap(collectors) {
+    if (typeof maplibregl === 'undefined') return;   // CDN blocked: feed still works
+    map = new maplibregl.Map({
+      container: 'pulse-map',
+      style: {
+        version: 8,
+        sources: {
+          carto: {
+            type: 'raster',
+            tiles: ['https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}@2x.png',
+                    'https://b.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}@2x.png'],
+            tileSize: 256,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+          },
+        },
+        layers: [{id: 'carto', type: 'raster', source: 'carto'}],
+      },
+      center: [10, 25], zoom: 1.4, attributionControl: {compact: true},
+    });
+    map.addControl(new maplibregl.NavigationControl({showCompass: false}), 'top-right');
+    for (const c of collectors) {
+      const el = document.createElement('div');
+      el.className = 'marker';
+      el.title = `${c.rrc.toUpperCase()} — ${c.city} (${c.scope})`;
+      const marker = new maplibregl.Marker({element: el})
+        .setLngLat([c.lon, c.lat])
+        .setPopup(new maplibregl.Popup({offset: 12})
+          .setText(`${c.rrc.toUpperCase()} · ${c.city}, ${c.country} · ${c.scope}`))
+        .addTo(map);
+      state.markers[c.rrc] = {marker, el, timeout: null};
+    }
+  }
+  // Wait for the deferred maplibre script: inline scripts run before deferred
+  // ones, so fetching immediately races and finds maplibregl undefined.
+  window.addEventListener('load', () => {
+    fetch('/api/collectors').then(r => r.json()).then(d => initMap(d.collectors));
+  });
+
+  function flash(rrc) {
+    const m = state.markers[rrc];
+    if (!m || REDUCED) return;
+    m.el.classList.add('flash');
+    clearTimeout(m.timeout);
+    m.timeout = setTimeout(() => m.el.classList.remove('flash'), 450);
+  }
+
+  // ---- RIS Live feed --------------------------------------------------------
+  // A filtered slice of the firehose: enough motion to be alive without
+  // overwhelming the tab. One multihop + a spread of IXP collectors.
+  const HOSTS = ['rrc00', 'rrc01', 'rrc06', 'rrc11', 'rrc15', 'rrc19', 'rrc23'];
+  const ticker = $('ticker');
+  const MAX_ROWS = 60;
+  let ws, retryMs = 1000;
+
+  function connect() {
+    ws = new WebSocket('wss://ris-live.ripe.net/v1/ws/?client=routelens-pulse');
+    setConn('connecting');
+    ws.onopen = () => {
+      retryMs = 1000;
+      setConn('up');
+      for (const host of HOSTS) {
+        ws.send(JSON.stringify({type: 'ris_subscribe', data: {host, type: 'UPDATE'}}));
+      }
+    };
+    ws.onmessage = ev => {
+      const msg = JSON.parse(ev.data);
+      if (msg.type !== 'ris_message') return;
+      handle(msg.data);
+    };
+    ws.onclose = () => {
+      setConn('down');
+      setTimeout(connect, retryMs);
+      retryMs = Math.min(retryMs * 2, 30000);
+    };
+    ws.onerror = () => ws.close();
+  }
+
+  function setConn(cls) {
+    const el = $('conn');
+    el.className = 'conn ' + cls;
+    el.textContent = cls === 'up' ? 'live' : (cls === 'down' ? 'reconnecting…' : 'connecting…');
+  }
+
+  function handle(d) {
+    const rrc = (d.host || '').split('.')[0];
+    state.total++;
+    state.rrcsSeen.add(rrc);
+    state.window.push(performance.now());
+    const anns = (d.announcements || []).flatMap(a => a.prefixes || []);
+    const wdrs = d.withdrawals || [];
+    state.ann += anns.length;
+    state.wdr += wdrs.length;
+    flash(rrc);
+    if (anns.length) addRow('ANN', rrc, anns[0], d.path);
+    else if (wdrs.length) addRow('WDR', rrc, wdrs[0], null);
+  }
+
+  let pendingRows = [];
+  function addRow(kind, rrc, prefix, path) {
+    pendingRows.push({kind, rrc, prefix, path});
+  }
+
+  // Render at most ~8 rows/sec so the feed is readable, not a blur.
+  setInterval(() => {
+    if (!pendingRows.length) return;
+    const batch = pendingRows.slice(-2);
+    pendingRows = [];
+    for (const row of batch) {
+      const li = document.createElement('li');
+      const cls = row.kind === 'ANN' ? 't-ann' : 't-wdr';
+      const path = row.path ? ` <span class="t-path">via ${row.path.join(' ')}</span>` : '';
+      li.innerHTML = `<span class="${cls}">${row.kind}</span>` +
+        `<span class="t-rrc">${row.rrc}</span>` +
+        `<a class="t-pfx" href="/q?query=${encodeURIComponent(row.prefix)}">${row.prefix}</a>${path}`;
+      ticker.prepend(li);
+    }
+    while (ticker.children.length > MAX_ROWS) ticker.lastChild.remove();
+  }, 250);
+
+  // ---- counters -------------------------------------------------------------
+  setInterval(() => {
+    const now = performance.now();
+    state.window = state.window.filter(t => now - t < 5000);
+    const rate = state.window.length / 5;
+    state.peak = Math.max(state.peak, rate);
+    $('c-total').textContent = state.total.toLocaleString();
+    $('c-rate').textContent = rate.toFixed(rate < 10 ? 1 : 0);
+    $('c-rate-peak').textContent = state.peak ? `peak ${state.peak.toFixed(0)}/s` : '';
+    $('c-ann').textContent = state.ann.toLocaleString();
+    $('c-wdr').textContent = state.wdr.toLocaleString();
+    $('c-rrcs').innerHTML = state.rrcsSeen.size + '<span class="sub">/23</span>';
+  }, 1000);
+
+  connect();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,13 @@
+<header class="phead"><h2>RouteViews</h2><span class="srctag">api.routeviews.org</span></header>
+{% if result.ok %}
+{% set d = result.data %}
+<div class="kv"><span>Reporting peers</span><strong>{{ d.peer_count }}</strong></div>
+<div class="kv"><span>Origin</span><strong>{% for a in d.origin_asns %}AS{{ a }} {% else %}none{% endfor %}</strong></div>
+{% if d.rpki_state %}<div class="kv"><span>RPKI</span><strong><span class="badge {{ 'valid' if d.rpki_state == 'valid' else 'invalid' }}">{{ d.rpki_state }}</span> · {{ d.roa_count }} ROA{{ 's' if d.roa_count != 1 }}</strong></div>{% endif %}
+<div class="kv"><span>Collectors</span><strong>{{ d.collectors|join(', ') }}</strong></div>
+{% if d.sample_paths %}
+<div class="kv"><span>Sample path</span><strong>{{ d.sample_paths[0]|join(' ') }}</strong></div>
+{% endif %}
+{% else %}
+<div class="empty"><strong>RouteViews unavailable.</strong><p>{{ result.error }}</p></div>
+{% endif %}

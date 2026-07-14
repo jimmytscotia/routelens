@@ -35,6 +35,12 @@ CREATE TABLE IF NOT EXISTS check_results (
 
 CREATE INDEX IF NOT EXISTS idx_check_results_resource_type_time
   ON check_results(resource_id, check_type, checked_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS api_cache (
+  cache_key TEXT PRIMARY KEY,
+  payload_json TEXT NOT NULL,
+  fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 
@@ -183,6 +189,33 @@ class RouteLensStore:
                 (resource_id,),
             ).fetchall()
         return {row["check_type"]: self._check_dict(row) for row in rows}
+
+    def cache_get(self, cache_key: str, *, max_age_seconds: int) -> Any | None:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT payload_json FROM api_cache
+                 WHERE cache_key = ?
+                   AND fetched_at >= datetime('now', ?)
+                """,
+                (cache_key, f"-{int(max_age_seconds)} seconds"),
+            ).fetchone()
+        if row is None:
+            return None
+        return json.loads(row["payload_json"])
+
+    def cache_set(self, cache_key: str, payload: Any) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO api_cache(cache_key, payload_json, fetched_at)
+                VALUES (?, ?, datetime('now'))
+                ON CONFLICT(cache_key) DO UPDATE
+                   SET payload_json = excluded.payload_json,
+                       fetched_at = excluded.fetched_at
+                """,
+                (cache_key, json.dumps(payload, sort_keys=True)),
+            )
 
     @staticmethod
     def _resource_dict(row: sqlite3.Row) -> dict[str, Any]:

@@ -1,0 +1,22 @@
+<header class="phead"><h2>RIS looking glass · {{ result.data.rrc_count if result.ok else '?' }} collectors, {{ result.data.peer_count if result.ok else '?' }} peers</h2><span class="srctag">stat.ripe.net</span></header>
+{% if result.ok %}
+{% set d = result.data %}
+<div class="tablewrap">
+<table class="datatable">
+  <thead><tr><th>Collector</th><th>Location</th><th class="num">Peers</th><th>Origins</th><th>Sample AS path</th></tr></thead>
+  <tbody>
+  {% for rrc in d.rrcs %}
+    <tr>
+      <td class="mono">{{ rrc.rrc }}</td>
+      <td>{{ rrc.location }}</td>
+      <td class="num mono">{{ rrc.peer_count }}</td>
+      <td class="mono">{% for a in rrc.origins %}AS{{ a }} {% endfor %}</td>
+      <td class="mono">{% if rrc.sample_paths %}{{ rrc.sample_paths[0]|join(' ') }}{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="empty"><strong>RIPEstat looking glass unavailable.</strong><p>{{ result.error }}</p></div>
+{% endif %}

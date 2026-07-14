@@ -21,17 +21,6 @@ def test_database_path_can_come_from_environment(tmp_path, monkeypatch):
     assert db_path.exists()
 
 
-def test_dashboard_loads_seeded_resources(tmp_path):
-    app = create_app({"DATABASE": str(tmp_path / "test.db"), "TESTING": True})
-    client = app.test_client()
-
-    response = client.get("/")
-
-    assert response.status_code == 200
-    assert b"RouteLens" in response.data
-    assert b"web.nexthop.engineer" in response.data
-
-
 def test_resource_detail_renders_latest_telemetry(tmp_path):
     app = create_app({"DATABASE": str(tmp_path / "test.db"), "TESTING": True})
     store = app.config["ROUTELENS_STORE"]

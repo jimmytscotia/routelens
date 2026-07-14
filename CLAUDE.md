@@ -42,8 +42,12 @@ ROUTELENS_DATABASE=instance/routelens.db uv run flask --app routelens.app:create
 The current passing test baseline is:
 
 ```text
-18 passed
+68 passed
 ```
+
+Local quirk: `uv sync` does not install the package itself (no `[build-system]` in
+pyproject), so `flask run` and `python -m routelens.cli` need `PYTHONPATH=src` locally.
+pytest works without it (`pythonpath = ["src"]` in pyproject).
 
 ## TDD expectations
 
@@ -93,11 +97,57 @@ curl --resolve routelens.nexthop.engineer:443:100.94.135.62 https://routelens.ne
 - Keep public `nexthop.engineer` apex resolving to `66.241.124.199`.
 - For deployment changes, produce a test plan and rollback notes before applying.
 
-## Recommended next tasks
+## RouteLens 2.0 direction (agreed with Jim, 2026-07-14)
 
-1. Add BGP path visualisation for prefix resources using stored `sample_paths` from RIPEstat.
-2. Add richer DNS comparison panels showing public answers vs private answers.
-3. Add an admin-only/manual “run checks now” action, or document why it is deferred.
-4. Add a deploy script that rsyncs source to `svc-01`, reinstalls, runs tests, restarts services, and verifies Caddy health.
-5. Add screenshots/blog evidence notes under `docs/`.
-6. Push to GitHub and add CI.
+RouteLens pivoted from a static lab status page to a live "routing observatory":
+
+- `/` is the **Pulse** page: browser connects directly to RIS Live
+  (`wss://ris-live.ripe.net`), MapLibre dark map of 23 RIS collectors, live
+  ticker + counters. Zero backend load for the live layer.
+- `/q?query=` is the **looking glass**: classify prefix/IP/ASN/hostname
+  (`query.py`), HTMX shell + panels from RIPEstat, RouteViews, NLNOG Ring,
+  Globalping, Cloudflare Radar (`sources.py`, cached in SQLite `api_cache`).
+- The Watchlist UI is removed for now; collector/store/resource pages remain.
+- Design register: **utilitarian** (bgp.tools-style density, no glow). See
+  PRODUCT.md before doing UI work. Design tokens live in base.html.
+- `CLOUDFLARE_RADAR_TOKEN` env var enables the Radar panel (degrades gracefully).
+
+## Approved dashboard roadmap (build one at a time, in order)
+
+All ten approved by Jim 2026-07-14. Most need the **RIS Live aggregator**
+(server-side stream consumer writing per-minute buckets to SQLite) — build it
+with #1 and reuse it everywhere:
+
+1. Collector activity league (busiest parts of the global Internet)
+2. ASN churn league (most active operators, named — Zayo/Vodafone/Sky/Google)
+3. Prefix flap leaderboard
+4. Origin-change monitor (block movements, hijack/migration candidates)
+5. RPKI scoreboard
+6. Address-space league (who owns the Internet, bgp.tools table dump)
+7. ASN profile pages
+8. Routing table growth tracker (RIPEstat historical, cheap win)
+9. Transit centrality (who carries the Internet)
+10. Country instability map
+
+## UK / LINX focus (Jim, 2026-07-14)
+
+Add a UK lens using LINX's public Alice-LG looking glasses (standard Alice REST
+API, no auth — `/api/v1/status`, `/api/v1/routeservers`,
+`/api/v1/lookup/prefix?q=<prefix>`):
+
+- `https://alice-collector.linx.net/` — LINX collectors (LON1, LON2, regional;
+  ~7M routes; route servers named e.g. COLLECTOR.LON1, COLLECTOR.MOM1)
+- `https://alice-rs.linx.net/` — LINX route servers (RS1/RS2 per LAN)
+- `https://alice-collector-center3.linx.net/` and
+  `https://alice-rs-center3.linx.net/` — NOTE: these are LINX's Middle East
+  exchanges (JED1/RIY1), not UK; verified 2026-07-14.
+
+Planned use: a "UK view" panel on prefix pages (how LON1/LON2/Manchester/Wales
+route servers see a prefix) and UK-specific activity dashboards.
+
+## Publishing intent
+
+Once Jim is happy with the lab build, RouteLens will be published publicly on
+https://nexthop.engineer (that site lives at ~/Developer/personal/nexthop-engineer,
+Flask on Fly.io). Get explicit sign-off before any public deploy; mind API
+rate limits and the Radar CC BY-NC attribution when the audience becomes public.
