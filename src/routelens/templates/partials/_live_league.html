@@ -20,23 +20,13 @@
   const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const HOSTS = ['rrc00', 'rrc01', 'rrc06', 'rrc11', 'rrc15', 'rrc19', 'rrc23'];
   const badge = document.getElementById('livebadge');
-  let dirty = false;
+  // Deltas accumulate here and are applied in one visible step every APPLY_MS,
+  // so counters advance in readable chunks rather than a per-message blur.
+  const APPLY_MS = 2000;
+  let pending = {};   // key -> {upd, ann, wdr}
 
   function tbody() { return document.querySelector('tbody[data-live]'); }
-
-  function bump(row, cls, delta) {
-    const cell = row.querySelector('td.' + cls);
-    if (!cell || !delta) return;
-    const v = (parseInt(cell.dataset.v, 10) || 0) + delta;
-    cell.dataset.v = v;
-    cell.textContent = v.toLocaleString();
-    if (!REDUCED) {
-      cell.classList.remove('tick');
-      void cell.offsetWidth;   // restart the animation
-      cell.classList.add('tick');
-    }
-    dirty = true;
-  }
+  function sortCls() { return tbody()?.dataset.live === 'rrc' ? 'c-upd' : 'c-ann'; }
 
   function handle(d) {
     const body = tbody();
@@ -53,24 +43,50 @@
       if (!annCount || typeof origin !== 'number') return;
       key = String(origin);
     }
-    const row = body.querySelector('tr[data-key="' + key + '"]');
-    if (!row) return;   // outside the current top-N: the next server refresh handles it
-    bump(row, 'c-upd', 1);
-    bump(row, 'c-ann', annCount);
-    if (mode === 'rrc') bump(row, 'c-wdr', wdrCount);
+    const p = pending[key] || (pending[key] = {upd: 0, ann: 0, wdr: 0});
+    p.upd += 1; p.ann += annCount; p.wdr += wdrCount;
   }
 
-  // FLIP re-sort: capture positions, reorder by live count, animate the moves.
-  function resort() {
-    if (!dirty) return;
-    dirty = false;
+  function bump(row, cls, delta) {
+    const cell = row.querySelector('td.' + cls);
+    if (!cell || !delta) return;
+    const v = (parseInt(cell.dataset.v, 10) || 0) + delta;
+    cell.dataset.v = v;
+    cell.textContent = v.toLocaleString();
+    if (!REDUCED) {
+      cell.classList.remove('tick');
+      void cell.offsetWidth;   // restart the animation
+      cell.classList.add('tick');
+    }
+  }
+
+  // One chunked step: apply accumulated deltas, then FLIP re-sort.
+  function applyAndResort() {
     const body = tbody();
     if (!body) return;
+    const mode = body.dataset.live;
+    const keys = Object.keys(pending);
+    let changed = false;
+    for (const key of keys) {
+      const row = body.querySelector('tr[data-key="' + key + '"]');
+      if (!row) continue;   // outside the current top-N: next server refresh handles it
+      const p = pending[key];
+      if (mode === 'rrc') {
+        bump(row, 'c-upd', p.upd);
+        bump(row, 'c-wdr', p.wdr);
+      }
+      bump(row, 'c-ann', p.ann);
+      changed = true;
+    }
+    pending = {};
+    if (!changed) return;
+
     const rows = Array.from(body.querySelectorAll('tr[data-key]'));
     if (rows.length < 2) return;
+    const cls = sortCls();
     const sorted = rows.slice().sort((a, b) =>
-      (parseInt(b.querySelector('td.c-upd')?.dataset.v, 10) || 0) -
-      (parseInt(a.querySelector('td.c-upd')?.dataset.v, 10) || 0));
+      (parseInt(b.querySelector('td.' + cls)?.dataset.v, 10) || 0) -
+      (parseInt(a.querySelector('td.' + cls)?.dataset.v, 10) || 0));
     if (sorted.every((r, i) => r === rows[i])) return;
     const first = new Map(rows.map(r => [r, r.getBoundingClientRect().top]));
     sorted.forEach(r => body.appendChild(r));
@@ -88,7 +104,7 @@
       });
     });
   }
-  setInterval(resort, 2500);
+  setInterval(applyAndResort, APPLY_MS);
 
   let ws, retryMs = 1000;
   function setBadge(cls, text) {

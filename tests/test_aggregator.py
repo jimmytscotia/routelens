@@ -84,8 +84,14 @@ def test_accumulator_folds_origin_asn_hourly_buckets():
 
     asn_buckets = acc.asn_snapshot()
 
-    assert asn_buckets[("2026-07-14T13:00:00", 15169)] == {"updates": 2, "announcements": 3}
-    assert asn_buckets[("2026-07-14T13:00:00", 2856)] == {"updates": 1, "announcements": 1}
+    b15169 = asn_buckets[("2026-07-14T13:00:00", 15169)]
+    assert b15169["updates"] == 2
+    assert b15169["announcements"] == 3
+    # 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24 — three distinct prefixes.
+    assert b15169["distinct"] == 3
+    b2856 = asn_buckets[("2026-07-14T13:00:00", 2856)]
+    assert b2856["updates"] == 1
+    assert b2856["distinct"] == 1
     assert len(asn_buckets) == 2
 
 
@@ -100,3 +106,11 @@ def test_flush_writes_asn_buckets_hourly(tmp_path):
     league = store.asn_league(since="2026-07-14T00:00:00", limit=5)
     assert league[0]["asn"] == 15169
     assert league[0]["updates"] == 1
+    assert league[0]["peak_distinct"] == 1
+
+    # Same prefix announced again in the same hour: distinct stays 1.
+    acc.ingest({**msg(T0 + 90, ann_prefixes=["192.0.2.0/24"]), "path": [64500, 15169]})
+    acc.flush(store, now_ts=T0 + 95)
+    league = store.asn_league(since="2026-07-14T00:00:00", limit=5)
+    assert league[0]["announcements"] == 2
+    assert league[0]["peak_distinct"] == 1

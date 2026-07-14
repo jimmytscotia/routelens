@@ -69,15 +69,22 @@ class ActivityAccumulator:
         origin = path[-1] if path else None
         if ann_prefixes and isinstance(origin, int):
             akey = (_hour_bucket(float(ts)), origin)
-            abucket = self._asn_buckets.setdefault(akey, {"updates": 0, "announcements": 0})
+            abucket = self._asn_buckets.setdefault(
+                akey, {"updates": 0, "announcements": 0, "prefixes": set()}
+            )
             abucket["updates"] += 1
             abucket["announcements"] += ann_prefixes
+            for ann in data.get("announcements") or []:
+                abucket["prefixes"].update(ann.get("prefixes") or [])
 
     def snapshot(self) -> dict[tuple[str, str], dict[str, int]]:
         return dict(self._buckets)
 
-    def asn_snapshot(self) -> dict[tuple[str, int], dict[str, int]]:
-        return dict(self._asn_buckets)
+    def asn_snapshot(self) -> dict[tuple[str, int], dict]:
+        return {
+            key: {**{k: v for k, v in b.items() if k != "prefixes"}, "distinct": len(b["prefixes"])}
+            for key, b in self._asn_buckets.items()
+        }
 
     def flush(self, store: RouteLensStore, *, now_ts: float | None = None) -> int:
         """Write all buckets (idempotent upsert); drop completed periods from
@@ -104,6 +111,7 @@ class ActivityAccumulator:
                 asn=asn,
                 updates=counts["updates"],
                 announcements=counts["announcements"],
+                distinct=len(counts["prefixes"]),
             )
             written += 1
             if bucket_ts < current_hour:

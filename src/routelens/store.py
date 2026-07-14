@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS ris_asn_activity (
   asn INTEGER NOT NULL,              -- origin ASN (last hop of announced paths)
   updates INTEGER NOT NULL DEFAULT 0,
   announcements INTEGER NOT NULL DEFAULT 0,
+  distinct_prefixes INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (bucket_ts, asn)
 );
 
@@ -122,6 +123,12 @@ class RouteLensStore:
     def init_schema(self) -> None:
         with self.connect() as conn:
             conn.executescript(SCHEMA_SQL)
+            # Migrations for tables created before a column existed
+            # (CREATE IF NOT EXISTS won't touch an existing table).
+            try:
+                conn.execute("ALTER TABLE ris_asn_activity ADD COLUMN distinct_prefixes INTEGER NOT NULL DEFAULT 0")
+            except sqlite3.OperationalError:
+                pass  # column already present
 
     def seed_defaults(self) -> None:
         for resource in DEFAULT_RESOURCES:
@@ -293,17 +300,20 @@ class RouteLensStore:
             cur = conn.execute("DELETE FROM ris_activity WHERE bucket_ts < ?", (before,))
             return cur.rowcount
 
-    def record_asn_bucket(self, *, bucket_ts: str, asn: int, updates: int, announcements: int) -> None:
+    def record_asn_bucket(
+        self, *, bucket_ts: str, asn: int, updates: int, announcements: int, distinct: int = 0
+    ) -> None:
         with self.connect() as conn:
             conn.execute(
                 """
-                INSERT INTO ris_asn_activity(bucket_ts, asn, updates, announcements)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO ris_asn_activity(bucket_ts, asn, updates, announcements, distinct_prefixes)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(bucket_ts, asn) DO UPDATE
                    SET updates = excluded.updates,
-                       announcements = excluded.announcements
+                       announcements = excluded.announcements,
+                       distinct_prefixes = excluded.distinct_prefixes
                 """,
-                (bucket_ts, asn, updates, announcements),
+                (bucket_ts, asn, updates, announcements, distinct),
             )
 
     def upsert_asn_names(self, rows: list[tuple[int, str, str]]) -> None:
@@ -324,12 +334,13 @@ class RouteLensStore:
                        COALESCE(n.name, '') AS name,
                        COALESCE(n.country, '') AS country,
                        SUM(a.updates) AS updates,
-                       SUM(a.announcements) AS announcements
+                       SUM(a.announcements) AS announcements,
+                       MAX(a.distinct_prefixes) AS peak_distinct
                   FROM ris_asn_activity a
                   LEFT JOIN asn_names n ON n.asn = a.asn
                  WHERE a.bucket_ts >= ?
                  GROUP BY a.asn
-                 ORDER BY updates DESC
+                 ORDER BY announcements DESC
                  LIMIT ?
                 """,
                 (since, limit),

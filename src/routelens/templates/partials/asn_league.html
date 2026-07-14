@@ -4,7 +4,9 @@
   <thead>
     <tr>
       <th class="num">#</th><th>Origin AS</th><th>Operator</th><th>CC</th>
-      <th class="num">Updates ({{ window_label }})</th><th class="num">Announced prefixes</th>
+      <th class="num">Announced prefixes ({{ window_label }})</th>
+      <th class="num">Distinct prefixes (peak hour)</th>
+      <th>Pattern</th>
     </tr>
   </thead>
   <tbody data-live="asn">
@@ -14,15 +16,21 @@
       <td class="mono"><a href="/q?query=AS{{ row.asn }}">AS{{ row.asn }}</a>{% if row.country == 'GB' %}<span class="uk-tag">UK</span>{% endif %}</td>
       <td>{{ row.name or '—' }}</td>
       <td class="mono">{{ row.country }}</td>
-      <td class="num mono c-upd" data-v="{{ row.updates }}">{{ "{:,}".format(row.updates) }}</td>
       <td class="num mono c-ann" data-v="{{ row.announcements }}">{{ "{:,}".format(row.announcements) }}</td>
+      <td class="num mono">{{ "{:,}".format(row.peak_distinct) }}</td>
+      <td>{% if row.peak_distinct and row.announcements / row.peak_distinct > 20 %}
+            <span class="badge warning">flappy</span>
+          {% elif row.peak_distinct > 500 %}
+            <span class="badge unknown">estate-wide</span>
+          {% endif %}</td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
 </div>
 <p class="attribution">Origin attribution counts announcement-bearing updates only; withdrawals carry no AS path.
-   High churn can mean instability, traffic engineering, or a large prefix estate — it is not by itself a fault.</p>
+   Many announcements over few distinct prefixes = flapping; announcements ≈ distinct prefixes = a broad
+   one-off event (estate re-announce, session reset). Neither is by itself a fault.</p>
 {% else %}
 <div class="empty">
   <strong>No ASN activity data yet.</strong>
