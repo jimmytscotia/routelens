@@ -2,7 +2,19 @@
 {% block title %}RouteLens · live BGP pulse{% endblock %}
 {% block extra_head %}
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" defer></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" defer
+        onerror="this.dataset.failed=1"></script>
+<script>
+  // Fallback CDN if unpkg fails or is blocked.
+  window.addEventListener('load', () => {
+    if (typeof maplibregl !== 'undefined') return;
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.min.js';
+    s.onload = () => window.dispatchEvent(new Event('maplibre-ready'));
+    s.onerror = () => window.dispatchEvent(new Event('maplibre-failed'));
+    document.head.appendChild(s);
+  });
+</script>
 <style>
   .pulsegrid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:14px;align-items:start}
   @media (max-width: 980px){.pulsegrid{grid-template-columns:1fr}}
@@ -81,8 +93,15 @@
 
   // ---- map ----------------------------------------------------------------
   let map = null;
+  function mapFail(reason) {
+    document.getElementById('pulse-map').innerHTML =
+      '<p class="err" style="padding:14px">Map unavailable: ' + reason + '</p>';
+  }
   function initMap(collectors) {
-    if (typeof maplibregl === 'undefined') return;   // CDN blocked: feed still works
+    if (typeof maplibregl === 'undefined') {
+      mapFail('the MapLibre library failed to load from both CDNs');
+      return;
+    }
     map = new maplibregl.Map({
       container: 'pulse-map',
       style: {
@@ -98,8 +117,9 @@
         },
         layers: [{id: 'carto', type: 'raster', source: 'carto'}],
       },
-      center: [10, 25], zoom: 1.4, attributionControl: {compact: true},
+      center: [10, 25], zoom: 1.4, attributionControl: false,
     });
+    map.addControl(new maplibregl.AttributionControl({compact: true}));
     map.addControl(new maplibregl.NavigationControl({showCompass: false}), 'top-right');
     for (const c of collectors) {
       const el = document.createElement('div');
@@ -115,9 +135,23 @@
   }
   // Wait for the deferred maplibre script: inline scripts run before deferred
   // ones, so fetching immediately races and finds maplibregl undefined.
-  window.addEventListener('load', () => {
-    fetch('/api/collectors').then(r => r.json()).then(d => initMap(d.collectors));
-  });
+  function startMap() {
+    fetch('/api/collectors')
+      .then(r => r.json())
+      .then(d => { try { initMap(d.collectors); } catch (e) { mapFail(e.message); } })
+      .catch(e => mapFail('collector list failed: ' + e.message));
+  }
+  if (document.readyState === 'complete' && typeof maplibregl !== 'undefined') {
+    startMap();
+  } else {
+    window.addEventListener('load', () => {
+      if (typeof maplibregl !== 'undefined') startMap();
+      // else the fallback loader in <head> takes over and fires one of:
+    });
+    window.addEventListener('maplibre-ready', startMap);
+    window.addEventListener('maplibre-failed', () =>
+      mapFail('the MapLibre library failed to load from both CDNs'));
+  }
 
   function flash(rrc) {
     const m = state.markers[rrc];
