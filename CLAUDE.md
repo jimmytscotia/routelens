@@ -130,12 +130,21 @@ with #1 and reuse it everywhere:
    raised to 384M for the 400k-entry origin map)
 5. RPKI scoreboard — LIVE 2026-07-14 (RouteViews-scored UK operators +
    top churners, hourly; Radar global panel token-gated)
-6. Address-space league (who owns the Internet, bgp.tools table dump)
-7. ASN profile pages
+6. Address-space league — LIVE 2026-07-14 (routelens-spacescan.timer, daily
+   oneshot ingest of bgp.tools table.jsonl, per-ASN overlap-merged totals)
+7. ASN profile pages — LIVE 2026-07-14 (/q ASN view: aggregator stats +
+   RIPEstat prefixes + RouteViews RPKI + PeeringDB; index at
+   /dashboards/asn-profiles)
 8. Routing table growth tracker — LIVE 2026-07-14 (potaroo daily, cached)
 9. Transit centrality — LIVE 2026-07-14 (middle-hop counts, prepend-dedup,
    share of observed paths, avg path length)
-10. Country instability map
+10. Country instability — LIVE 2026-07-14 (rollup of origin buckets by
+    bgp.tools registration country, intensity = announcements/origin)
+
+ALL TEN DASHBOARDS SHIPPED 2026-07-14. svc-01 now runs three units:
+routelens.service (web), routelens-aggregator.service (RIS Live stream),
+routelens-spacescan.timer (daily bgp.tools table ingest) — plus the original
+routelens-collector.timer.
 
 ## UK / LINX focus (Jim, 2026-07-14)
 

@@ -1,0 +1,15 @@
+[Unit]
+Description=RouteLens address-space scan (bgp.tools table snapshot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=lab
+Group=lab
+WorkingDirectory=/opt/routelens
+Environment=ROUTELENS_DATABASE=/var/lib/routelens/routelens.db
+ExecStart=/opt/routelens/.venv/bin/python -m routelens.spacescan
+# Parses a ~71MB, 1.5M-row dump in memory; runs alone, so allow headroom.
+MemoryMax=768M
+TimeoutStartSec=900

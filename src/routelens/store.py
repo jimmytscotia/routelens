@@ -80,6 +80,14 @@ CREATE TABLE IF NOT EXISTS ris_path_stats (
   hops INTEGER NOT NULL DEFAULT 0    -- summed dedup path lengths
 );
 
+CREATE TABLE IF NOT EXISTS address_space (
+  asn INTEGER PRIMARY KEY,
+  v4_slash24 INTEGER NOT NULL DEFAULT 0,  -- announced IPv4 space in /24 equivalents
+  v6_slash48 INTEGER NOT NULL DEFAULT 0,  -- announced IPv6 space in /48 equivalents
+  prefixes INTEGER NOT NULL DEFAULT 0,
+  scanned_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS rpki_scores (
   asn INTEGER PRIMARY KEY,
   total INTEGER NOT NULL,
@@ -594,6 +602,32 @@ class RouteLensStore:
             "transit_paths": transit["paths"],
             "rpki": dict(rpki_row) if rpki_row else None,
         }
+
+    def replace_address_space(self, rows: list[dict[str, Any]]) -> None:
+        """A scan replaces the whole table atomically: stale ASNs vanish."""
+        with self.connect() as conn:
+            conn.execute("DELETE FROM address_space")
+            conn.executemany(
+                """
+                INSERT INTO address_space(asn, v4_slash24, v6_slash48, prefixes, scanned_at)
+                VALUES (:asn, :v4_slash24, :v6_slash48, :prefixes, datetime('now'))
+                """,
+                rows,
+            )
+
+    def address_space_league(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT s.*, COALESCE(n.name, '') AS name, COALESCE(n.country, '') AS country
+                  FROM address_space s
+                  LEFT JOIN asn_names n ON n.asn = s.asn
+                 ORDER BY s.v4_slash24 DESC, s.v6_slash48 DESC
+                 LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def upsert_rpki_score(self, *, asn: int, total: int, valid: int, invalid: int, notfound: int) -> None:
         with self.connect() as conn:

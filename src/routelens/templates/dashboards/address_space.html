@@ -1,0 +1,27 @@
+{% extends "dashboards/_layout.html" %}
+{% block title %}Address space · RouteLens{% endblock %}
+{% block dashboard %}
+  <div class="pagehead" style="padding-top:0">
+    <h1>Address-space league</h1>
+    <p>Who announces the most of the Internet: announced IPv4 and IPv6 space per origin AS,
+       from the daily bgp.tools table snapshot. Within each operator, overlapping announcements
+       are merged so aggregates plus their own more-specifics count once.</p>
+  </div>
+  <section class="panel">
+    <header class="phead">
+      <h2>Largest announced estates</h2>
+      <span class="srctag">bgp.tools table.jsonl · daily scan</span>
+    </header>
+    <div id="spaceleague"
+         hx-get="/partials/dashboards/address-space"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+      <p class="loading">Loading…</p>
+    </div>
+  </section>
+<style>
+  .uk-row td{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+  .uk-tag{font-size:.5625rem;font-family:var(--mono);color:var(--accent-ink);
+    border:1px solid var(--line-strong);border-radius:999px;padding:1px 6px;margin-left:6px;vertical-align:middle}
+</style>
+{% endblock %}

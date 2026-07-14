@@ -1,0 +1,39 @@
+{% if rows %}
+<div class="tablewrap">
+<table class="datatable">
+  <thead>
+    <tr>
+      <th class="num" title="Rank by announced IPv4 space">#</th>
+      <th title="The origin AS announcing the space. Click for the full profile.">Origin AS</th>
+      <th title="Operator name and registration country from bgp.tools">Operator</th>
+      <th title="Registration country of the ASN">CC</th>
+      <th class="num" title="Announced IPv4 space in /24 equivalents (256 addresses each), overlaps within the AS merged">IPv4 (/24s)</th>
+      <th class="num" title="Announced IPv6 space in /48 equivalents, overlaps within the AS merged">IPv6 (/48s)</th>
+      <th class="num" title="Announced prefixes in the snapshot">Prefixes</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for row in rows %}
+    <tr{% if row.country == 'GB' %} class="uk-row"{% endif %}>
+      <td class="num mono">{{ row.rank }}</td>
+      <td class="mono"><a href="/q?query=AS{{ row.asn }}">AS{{ row.asn }}</a>{% if row.country == 'GB' %}<span class="uk-tag">UK</span>{% endif %}</td>
+      <td>{{ row.name or '—' }}</td>
+      <td class="mono">{{ row.country }}</td>
+      <td class="num mono">{{ "{:,}".format(row.v4_slash24) }}</td>
+      <td class="num mono">{{ "{:,}".format(row.v6_slash48) }}</td>
+      <td class="num mono">{{ "{:,}".format(row.prefixes) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="attribution">Scanned {{ rows[0].scanned_at }} UTC. Announced-space semantics: where two different
+   networks announce overlapping blocks, both are credited — this measures what each AS puts in the routing
+   table, not registry allocations. Data: bgp.tools.</p>
+{% else %}
+<div class="empty">
+  <strong>No address-space scan yet.</strong>
+  <p>The daily scan (bgp.tools table snapshot, ~1.5M prefixes) hasn't run on this host.
+     It runs overnight via <code>routelens-spacescan.timer</code>.</p>
+</div>
+{% endif %}

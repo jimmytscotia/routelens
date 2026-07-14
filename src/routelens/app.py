@@ -379,6 +379,17 @@ def create_app(config: dict | None = None) -> Flask:
             }
         return render_template("partials/table_growth.html", result=result, charts=charts)
 
+    @app.get("/dashboards/address-space")
+    def dashboard_address_space():
+        return render_template("dashboards/address_space.html")
+
+    @app.get("/partials/dashboards/address-space")
+    def partial_dashboard_address_space():
+        rows = store.address_space_league(limit=50)
+        for rank, row in enumerate(rows, start=1):
+            row["rank"] = rank
+        return render_template("partials/address_space.html", rows=rows)
+
     def _valid_asn_or_400() -> int:
         raw = request.args.get("asn", "")
         if not raw.isdigit() or not (0 < int(raw) <= 4_294_967_295):

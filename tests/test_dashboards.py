@@ -80,7 +80,8 @@ def test_all_pages_render_global_sidebar_with_categories(tmp_path):
             "Transit centrality", "Country instability",
         ]:
             assert title in body, (path, title)
-        assert "soon" in body.lower(), path
+        # The full roadmap shipped: every dashboard is a live link now.
+        assert 'class="planned"' not in body, path
 
     # The current page is marked in the sidebar.
     assert 'aria-current="page"' in client.get("/dashboards/collectors").data.decode()
@@ -457,3 +458,32 @@ def test_asn_profiles_index_lists_uk_operators_and_churners(tmp_path):
     assert "British Telecommunications PLC" in body
     # Current churners offered as examples too.
     assert "/q?query=AS15169" in body
+
+
+def test_address_space_page_and_partial(tmp_path):
+    app = _app(tmp_path)
+    store = app.config["ROUTELENS_STORE"]
+    store.upsert_asn_names([(3356, "Lumen", "US"), (2856, "British Telecommunications PLC", "GB")])
+    store.replace_address_space([
+        {"asn": 3356, "v4_slash24": 100000, "v6_slash48": 5000000, "prefixes": 9000},
+        {"asn": 2856, "v4_slash24": 40000, "v6_slash48": 2000000, "prefixes": 500},
+    ])
+    client = app.test_client()
+
+    page = client.get("/dashboards/address-space")
+    assert page.status_code == 200
+    assert b"Address space" in page.data
+
+    body = client.get("/partials/dashboards/address-space").data.decode()
+    assert body.index("AS3356") < body.index("AS2856")
+    assert "100,000" in body
+    assert "uk-row" in body
+    assert "scanned" in body.lower()
+
+
+def test_address_space_empty_state(tmp_path):
+    client = _app(tmp_path).test_client()
+
+    body = client.get("/partials/dashboards/address-space").data.decode()
+
+    assert "no address-space scan yet" in body.lower()

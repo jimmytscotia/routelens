@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily RouteLens address-space scan
+
+[Timer]
+OnCalendar=*-*-* 04:40:00 UTC
+RandomizedDelaySec=1200
+Persistent=true
+
+[Install]
+WantedBy=timers.target
