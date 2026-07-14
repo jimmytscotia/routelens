@@ -1,0 +1,41 @@
+{% extends "dashboards/_layout.html" %}
+{% block title %}Origin changes · RouteLens{% endblock %}
+{% block dashboard %}
+  <div class="pagehead" style="padding-top:0">
+    <h1>Origin change monitor</h1>
+    <p>Prefixes whose announcing AS changed — block migrations, leaks and hijack candidates.
+       A change is only reported after the old origin was stable and the new origin was
+       confirmed by consecutive sightings, so multihoming noise is filtered at source.
+       These are observations, not verdicts: verify before acting.</p>
+  </div>
+  <section class="panel">
+    <header class="phead">
+      <div class="windowtabs" role="tablist" aria-label="Time window">
+        {% for seconds, label in windows.items() %}
+        <button class="wtab{% if seconds == 21600 %} active{% endif %}" role="tab"
+                hx-get="/partials/dashboards/origin-changes?window={{ seconds }}"
+                hx-target="#originevents" hx-swap="innerHTML"
+                onclick="document.querySelectorAll('.wtab').forEach(b=>b.classList.remove('active'));this.classList.add('active')">
+          {{ label }}</button>
+        {% endfor %}
+      </div>
+      <span class="srctag">ris-live.ripe.net · confirmed transitions · hourly dedupe</span>
+    </header>
+    <div id="originevents"
+         hx-get="/partials/dashboards/origin-changes?window=21600"
+         hx-trigger="load, every 60s"
+         hx-swap="innerHTML">
+      <p class="loading">Loading…</p>
+    </div>
+  </section>
+<style>
+  .windowtabs{display:flex;gap:4px}
+  .wtab{background:var(--inset);border:1px solid var(--line);color:var(--muted);
+    font:inherit;font-size:.75rem;padding:4px 10px;border-radius:var(--r);cursor:pointer}
+  .wtab:hover{color:var(--ink)}
+  .wtab.active{color:var(--ink);border-color:var(--accent)}
+  .uk-row td{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+  .transition{white-space:nowrap}
+  .transition .arrow{color:var(--faint);padding:0 4px}
+</style>
+{% endblock %}

@@ -67,6 +67,17 @@ CREATE TABLE IF NOT EXISTS asn_names (
   country TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS ris_origin_events (
+  hour_bucket TEXT NOT NULL,         -- dedupe window
+  prefix TEXT NOT NULL,
+  old_asn INTEGER NOT NULL,
+  new_asn INTEGER NOT NULL,
+  flips INTEGER NOT NULL DEFAULT 1,  -- times this transition repeated in the hour
+  first_seen TEXT NOT NULL,
+  last_seen TEXT NOT NULL,
+  PRIMARY KEY (hour_bucket, prefix, old_asn, new_asn)
+);
+
 CREATE TABLE IF NOT EXISTS ris_prefix_activity (
   bucket_ts TEXT NOT NULL,           -- hour bucket, ISO8601 UTC
   prefix TEXT NOT NULL,
@@ -415,6 +426,43 @@ class RouteLensStore:
     def prune_prefix_activity(self, *, before: str) -> int:
         with self.connect() as conn:
             cur = conn.execute("DELETE FROM ris_prefix_activity WHERE bucket_ts < ?", (before,))
+            return cur.rowcount
+
+    def record_origin_event(self, *, observed_at: str, prefix: str, old_asn: int, new_asn: int) -> None:
+        hour_bucket = observed_at[:13] + ":00:00"
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO ris_origin_events(hour_bucket, prefix, old_asn, new_asn, flips, first_seen, last_seen)
+                VALUES (?, ?, ?, ?, 1, ?, ?)
+                ON CONFLICT(hour_bucket, prefix, old_asn, new_asn) DO UPDATE
+                   SET flips = flips + 1,
+                       last_seen = excluded.last_seen
+                """,
+                (hour_bucket, prefix, old_asn, new_asn, observed_at, observed_at),
+            )
+
+    def recent_origin_events(self, *, since: str, limit: int = 100) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT e.*,
+                       COALESCE(no.name, '') AS old_name, COALESCE(no.country, '') AS old_country,
+                       COALESCE(nn.name, '') AS new_name, COALESCE(nn.country, '') AS new_country
+                  FROM ris_origin_events e
+                  LEFT JOIN asn_names no ON no.asn = e.old_asn
+                  LEFT JOIN asn_names nn ON nn.asn = e.new_asn
+                 WHERE e.last_seen >= ?
+                 ORDER BY e.last_seen DESC
+                 LIMIT ?
+                """,
+                (since, limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def prune_origin_events(self, *, before: str) -> int:
+        with self.connect() as conn:
+            cur = conn.execute("DELETE FROM ris_origin_events WHERE last_seen < ?", (before,))
             return cur.rowcount
 
     @staticmethod

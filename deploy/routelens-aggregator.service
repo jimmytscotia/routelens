@@ -13,8 +13,9 @@ Environment=ROUTELENS_RETENTION_DAYS=7
 ExecStart=/opt/routelens/.venv/bin/python -m routelens.aggregator
 Restart=always
 RestartSec=5
-# The stream is bursty but the process is tiny; cap it defensively.
-MemoryMax=256M
+# The stream is bursty; the origin-change tracker holds a capped map of
+# up to 400k prefix->origin entries, so allow headroom over the old 256M.
+MemoryMax=384M
 CPUQuota=50%
 
 [Install]

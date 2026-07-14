@@ -7,7 +7,7 @@ DASHBOARDS = [
     {"slug": "collectors", "title": "Collector activity", "status": "live"},
     {"slug": "asns", "title": "ASN churn", "status": "live"},
     {"slug": "flaps", "title": "Prefix flaps", "status": "live"},
-    {"slug": "origin-changes", "title": "Origin changes", "status": "planned"},
+    {"slug": "origin-changes", "title": "Origin changes", "status": "live"},
     {"slug": "rpki", "title": "RPKI scoreboard", "status": "planned"},
     {"slug": "address-space", "title": "Address space", "status": "planned"},
     {"slug": "asn-profiles", "title": "ASN profiles", "status": "planned"},

@@ -41,6 +41,62 @@ def _hour_bucket(unix_ts: float) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%S")
 
 
+class OriginTracker:
+    """Tracks last-known origin AS per prefix and emits change events.
+
+    Tuned against the two big noise sources: interleaved multi-origin
+    announcements (multihoming/anycast seen across ~300 RIS peers) and
+    prefixes with no established baseline. An origin change is only reported
+    when the old origin was stable (seen >= stable_min times) AND the new
+    origin is confirmed by consecutive sightings (confirm_min) with no
+    counter-sighting in between.
+    """
+
+    def __init__(self, *, stable_min: int = 3, confirm_min: int = 2, max_prefixes: int = 400_000):
+        self.stable_min = stable_min
+        self.confirm_min = confirm_min
+        self.max_prefixes = max_prefixes
+        # prefix -> [origin, seen_count, candidate_origin, candidate_count]
+        self._state: dict[str, list] = {}
+
+    def __len__(self) -> int:
+        return len(self._state)
+
+    def current_origin(self, prefix: str) -> int | None:
+        entry = self._state.get(prefix)
+        return entry[0] if entry else None
+
+    def observe(self, prefix: str, origin: int, ts: float) -> dict | None:
+        entry = self._state.get(prefix)
+        if entry is None:
+            if len(self._state) >= self.max_prefixes:
+                # Evict the oldest ~10% (dicts preserve insertion order).
+                for key in list(self._state)[: max(1, self.max_prefixes // 10)]:
+                    del self._state[key]
+            self._state[prefix] = [origin, 1, None, 0]
+            return None
+
+        if origin == entry[0]:
+            entry[1] = min(entry[1] + 1, 1000)
+            entry[2], entry[3] = None, 0  # counter-sighting resets any candidate
+            return None
+
+        # Different origin. Without a stable baseline, just adopt it silently.
+        if entry[1] < self.stable_min:
+            self._state[prefix] = [origin, 1, None, 0]
+            return None
+
+        if entry[2] == origin:
+            entry[3] += 1
+        else:
+            entry[2], entry[3] = origin, 1
+        if entry[3] >= self.confirm_min:
+            old = entry[0]
+            self._state[prefix] = [origin, self.confirm_min, None, 0]
+            return {"prefix": prefix, "old_asn": old, "new_asn": origin, "observed_ts": ts}
+        return None
+
+
 class ActivityAccumulator:
     def __init__(self, *, flap_min_events: int = 8, flap_max_rows: int = 5000) -> None:
         self._buckets: dict[tuple[str, str], dict[str, int]] = {}
@@ -53,6 +109,8 @@ class ActivityAccumulator:
         self._prefix_buckets: dict[tuple[str, str], dict] = {}
         self.flap_min_events = flap_min_events
         self.flap_max_rows = flap_max_rows
+        self.origin_tracker = OriginTracker()
+        self._origin_events: list[dict] = []
 
     def ingest(self, data: dict) -> None:
         host = data.get("host") or ""
@@ -83,7 +141,7 @@ class ActivityAccumulator:
             for ann in data.get("announcements") or []:
                 abucket["prefixes"].update(ann.get("prefixes") or [])
 
-        # Per-prefix flap counting (hourly).
+        # Per-prefix flap counting (hourly) + origin-change tracking.
         hour = _hour_bucket(float(ts))
         for ann in data.get("announcements") or []:
             for prefix in ann.get("prefixes") or []:
@@ -93,6 +151,9 @@ class ActivityAccumulator:
                 pb["announcements"] += 1
                 if isinstance(origin, int):
                     pb["origin_asn"] = origin
+                    event = self.origin_tracker.observe(prefix, origin, float(ts))
+                    if event:
+                        self._origin_events.append(event)
         for prefix in data.get("withdrawals") or []:
             pb = self._prefix_buckets.setdefault(
                 (hour, prefix), {"announcements": 0, "withdrawals": 0, "origin_asn": None}
@@ -161,6 +222,19 @@ class ActivityAccumulator:
         for (bucket_ts, prefix) in list(self._prefix_buckets):
             if bucket_ts < current_hour:
                 del self._prefix_buckets[(bucket_ts, prefix)]
+
+        # Confirmed origin-change events (rare: dozens per hour, not thousands).
+        for event in self._origin_events:
+            store.record_origin_event(
+                observed_at=datetime.fromtimestamp(
+                    event["observed_ts"], tz=timezone.utc
+                ).strftime("%Y-%m-%dT%H:%M:%S"),
+                prefix=event["prefix"],
+                old_asn=event["old_asn"],
+                new_asn=event["new_asn"],
+            )
+            written += 1
+        self._origin_events.clear()
         return written
 
 
@@ -195,6 +269,7 @@ async def run(store: RouteLensStore) -> None:
                         removed = store.prune_activity(before=cutoff)
                         removed += store.prune_asn_activity(before=cutoff)
                         removed += store.prune_prefix_activity(before=cutoff)
+                        removed += store.prune_origin_events(before=cutoff)
                         last_prune = now
                         log.info("pruned %d buckets older than %s", removed, cutoff)
                     if now - last_names >= NAMES_REFRESH_S:

@@ -1,0 +1,45 @@
+{% if events %}
+<div class="tablewrap">
+<table class="datatable">
+  <thead>
+    <tr>
+      <th title="When this transition was last observed (UTC)">Last seen</th>
+      <th title="The prefix whose origin changed. Click to open in the looking glass and see who announces it right now.">Prefix</th>
+      <th title="Origin transition: the AS that was announcing the prefix, and the AS announcing it now. Names from bgp.tools.">Transition</th>
+      <th class="num" title="How many times this exact transition repeated within its hour — more than once or twice suggests flip-flopping rather than a clean move">Flips</th>
+      <th title="moved = one-way change (migration, or something worth checking). flip-flop = the origin bounces between the same ASes — usually multihoming/anycast behaviour, occasionally an origin conflict.">Pattern</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for e in events %}
+    <tr{% if e.old_country == 'GB' or e.new_country == 'GB' %} class="uk-row"{% endif %}>
+      <td class="mono">{{ e.last_seen }}</td>
+      <td class="mono"><a href="/q?query={{ e.prefix|urlencode }}">{{ e.prefix }}</a></td>
+      <td class="transition">
+        <a class="mono" href="/q?query=AS{{ e.old_asn }}" title="{{ e.old_name }}">AS{{ e.old_asn }}</a>
+        {% if e.old_name %}<span title="{{ e.old_name }}">{{ e.old_name|truncate(20) }}</span>{% endif %}
+        <span class="arrow" aria-hidden="true">→</span>
+        <a class="mono" href="/q?query=AS{{ e.new_asn }}" title="{{ e.new_name }}">AS{{ e.new_asn }}</a>
+        {% if e.new_name %}<span title="{{ e.new_name }}">{{ e.new_name|truncate(20) }}</span>{% endif %}
+      </td>
+      <td class="num mono">{{ e.flips }}</td>
+      <td>{% if e.flipflop %}
+            <span class="badge unknown" title="The origin bounces between the same ASes — usually legitimate multihoming or anycast seen across vantage points; occasionally a genuine origin conflict worth investigating.">flip-flop</span>
+          {% else %}
+            <span class="badge warning" title="A one-way origin change: could be a planned migration, an acquisition, a leak, or in the worst case a hijack. Click the prefix to see current announcements and RPKI status.">moved</span>
+          {% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="attribution">Confirmed transitions only: old origin stable (3+ sightings), new origin confirmed
+   (2 consecutive), deduplicated per hour. Cross-check candidates in the looking glass — RPKI state and
+   current collector views are one click away on the prefix.</p>
+{% else %}
+<div class="empty">
+  <strong>No confirmed origin changes in this window.</strong>
+  <p>That's normal for short windows — confirmed transitions are rare by design.
+     If the aggregator was just upgraded, tracking starts from its restart.</p>
+</div>
+{% endif %}

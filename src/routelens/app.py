@@ -236,6 +236,33 @@ def create_app(config: dict | None = None) -> Flask:
             "partials/flap_league.html", rows=rows, window_label=FLAP_WINDOWS[window]
         )
 
+    ORIGIN_WINDOWS = {3600: "1 hour", 21600: "6 hours", 86400: "24 hours", 604800: "7 days"}
+
+    @app.get("/dashboards/origin-changes")
+    def dashboard_origin_changes():
+        return render_template("dashboards/origin_changes.html", windows=ORIGIN_WINDOWS)
+
+    @app.get("/partials/dashboards/origin-changes")
+    def partial_dashboard_origin_changes():
+        from datetime import datetime, timedelta, timezone
+
+        try:
+            window = int(request.args.get("window", "21600"))
+        except ValueError:
+            abort(400)
+        if window not in ORIGIN_WINDOWS:
+            abort(400)
+        since = (datetime.now(timezone.utc) - timedelta(seconds=window)).strftime("%Y-%m-%dT%H:%M:%S")
+        events = store.recent_origin_events(since=since, limit=100)
+        # A transition whose reverse pair also appears in the window is a
+        # flip-flop (typical MOAS/multihoming), not a one-way move.
+        pairs = {(e["prefix"], e["old_asn"], e["new_asn"]) for e in events}
+        for e in events:
+            e["flipflop"] = e["flips"] > 2 or (e["prefix"], e["new_asn"], e["old_asn"]) in pairs
+        return render_template(
+            "partials/origin_events.html", events=events, window_label=ORIGIN_WINDOWS[window]
+        )
+
     @app.post("/api/globalping")
     def api_globalping_create():
         payload = request.get_json(silent=True) or {}

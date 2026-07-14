@@ -122,9 +122,12 @@ with #1 and reuse it everywhere:
    Refinement noted: subscribe to RIS_PEER_STATE and flag windows where a
    collector's peer session reset (table re-dump masquerades as an activity
    spike). Also consider normalising by peer count per collector.
-2. ASN churn league (most active operators, named — Zayo/Vodafone/Sky/Google)
-3. Prefix flap leaderboard
-4. Origin-change monitor (block movements, hijack/migration candidates)
+2. ASN churn league (most active operators, named) — LIVE 2026-07-14, with
+   distinct-prefix analysis (flappy/estate-wide patterns)
+3. Prefix flap leaderboard — LIVE 2026-07-14 (>=8 events/hour flush threshold)
+4. Origin-change monitor — LIVE 2026-07-14 (stability+confirmation heuristics,
+   hourly dedupe, flip-flop vs moved classification; aggregator MemoryMax
+   raised to 384M for the 400k-entry origin map)
 5. RPKI scoreboard
 6. Address-space league (who owns the Internet, bgp.tools table dump)
 7. ASN profile pages

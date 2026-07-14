@@ -213,3 +213,46 @@ def test_prune_prefix_activity(tmp_path):
     store.record_prefix_bucket(bucket_ts="2026-07-14T13:00:00", prefix="p", announcements=1, withdrawals=0, origin_asn=None)
 
     assert store.prune_prefix_activity(before="2026-07-07T00:00:00") == 1
+
+
+def test_origin_events_dedupe_per_hour_and_join_names(tmp_path):
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "origin.db")
+    store.init_schema()
+    store.upsert_asn_names([(64500, "Old Net", "GB"), (64666, "New Net", "TR")])
+
+    store.record_origin_event(
+        observed_at="2026-07-14T13:02:11", prefix="203.0.113.0/24", old_asn=64500, new_asn=64666
+    )
+    # Same transition again in the same hour: flips increments, no new row.
+    store.record_origin_event(
+        observed_at="2026-07-14T13:40:00", prefix="203.0.113.0/24", old_asn=64500, new_asn=64666
+    )
+    # The reverse transition is its own row (flip-flop pattern).
+    store.record_origin_event(
+        observed_at="2026-07-14T13:45:00", prefix="203.0.113.0/24", old_asn=64666, new_asn=64500
+    )
+
+    events = store.recent_origin_events(since="2026-07-14T13:00:00", limit=10)
+
+    assert len(events) == 2
+    # Most recent last-seen first.
+    assert events[0]["old_asn"] == 64666 and events[0]["new_asn"] == 64500
+    forward = events[1]
+    assert forward["flips"] == 2
+    assert forward["old_name"] == "Old Net"
+    assert forward["new_name"] == "New Net"
+    assert forward["new_country"] == "TR"
+    assert forward["last_seen"] == "2026-07-14T13:40:00"
+
+
+def test_prune_origin_events(tmp_path):
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "origin.db")
+    store.init_schema()
+    store.record_origin_event(observed_at="2026-07-01T00:00:00", prefix="p", old_asn=1, new_asn=2)
+    store.record_origin_event(observed_at="2026-07-14T13:00:00", prefix="p", old_asn=1, new_asn=2)
+
+    assert store.prune_origin_events(before="2026-07-07T00:00:00") == 1

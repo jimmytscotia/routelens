@@ -255,3 +255,41 @@ def test_flap_league_partial_empty_and_bad_window(tmp_path):
     assert "aggregator" in empty.data.decode().lower()
 
     assert client.get("/partials/dashboards/flaps?window=42").status_code == 400
+
+
+def test_origin_changes_page_and_partial(tmp_path):
+    app = _app(tmp_path)
+    store = app.config["ROUTELENS_STORE"]
+    store.upsert_asn_names([(64500, "Old Net Ltd", "GB"), (64666, "New Net LLC", "TR")])
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    store.record_origin_event(observed_at=now, prefix="203.0.113.0/24", old_asn=64500, new_asn=64666)
+    for _ in range(3):
+        store.record_origin_event(observed_at=now, prefix="198.51.100.0/24", old_asn=64500, new_asn=64777)
+        store.record_origin_event(observed_at=now, prefix="198.51.100.0/24", old_asn=64777, new_asn=64500)
+    client = app.test_client()
+
+    page = client.get("/dashboards/origin-changes")
+    assert page.status_code == 200
+    assert b"Origin change" in page.data
+
+    body = client.get("/partials/dashboards/origin-changes?window=21600").data.decode()
+    assert "203.0.113.0/24" in body
+    assert "Old Net Ltd" in body
+    assert "New Net LLC" in body
+    assert "AS64500" in body and "AS64666" in body
+    # Repeated same-pair transitions are marked as flip-flopping, not a move.
+    assert "flip-flop" in body
+    assert "moved" in body
+    # Old origin was UK: row highlighted.
+    assert "uk-row" in body
+    assert "/q?query=203.0.113.0/24" in body
+
+
+def test_origin_changes_partial_empty_and_bad_window(tmp_path):
+    client = _app(tmp_path).test_client()
+
+    empty = client.get("/partials/dashboards/origin-changes?window=21600")
+    assert empty.status_code == 200
+    assert "no confirmed origin changes" in empty.data.decode().lower()
+
+    assert client.get("/partials/dashboards/origin-changes?window=7").status_code == 400

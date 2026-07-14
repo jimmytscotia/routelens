@@ -153,3 +153,78 @@ def test_flush_writes_only_prefixes_above_event_threshold(tmp_path):
     assert league[0]["announcements"] == 2
     assert league[0]["withdrawals"] == 2
     assert league[0]["origin_asn"] == 15169
+
+
+def test_origin_tracker_requires_stability_and_confirmation():
+    from routelens.aggregator import OriginTracker
+
+    tracker = OriginTracker(stable_min=3, confirm_min=2)
+
+    # Establish a stable baseline: AS64500 seen three times.
+    for _ in range(3):
+        assert tracker.observe("203.0.113.0/24", 64500, T0) is None
+    # First sighting of a different origin: candidate only, no event yet.
+    assert tracker.observe("203.0.113.0/24", 64666, T0 + 10) is None
+    # Second consecutive sighting confirms the change.
+    event = tracker.observe("203.0.113.0/24", 64666, T0 + 20)
+    assert event == {"prefix": "203.0.113.0/24", "old_asn": 64500, "new_asn": 64666, "observed_ts": T0 + 20}
+    # After the swap the new origin is current: no further events.
+    assert tracker.observe("203.0.113.0/24", 64666, T0 + 30) is None
+
+
+def test_origin_tracker_interleaved_moas_does_not_confirm():
+    from routelens.aggregator import OriginTracker
+
+    tracker = OriginTracker(stable_min=3, confirm_min=2)
+    for _ in range(3):
+        tracker.observe("203.0.113.0/24", 64500, T0)
+
+    # Interleaved origins (classic multihoming as seen across peers):
+    # the candidate never gets two consecutive sightings.
+    assert tracker.observe("203.0.113.0/24", 64666, T0 + 1) is None
+    assert tracker.observe("203.0.113.0/24", 64500, T0 + 2) is None
+    assert tracker.observe("203.0.113.0/24", 64666, T0 + 3) is None
+    assert tracker.observe("203.0.113.0/24", 64500, T0 + 4) is None
+
+
+def test_origin_tracker_no_event_without_stable_baseline():
+    from routelens.aggregator import OriginTracker
+
+    tracker = OriginTracker(stable_min=3, confirm_min=2)
+
+    # Only seen once: swapping origin is a silent update, not an event.
+    tracker.observe("198.51.100.0/24", 64500, T0)
+    assert tracker.observe("198.51.100.0/24", 64777, T0 + 1) is None
+    assert tracker.observe("198.51.100.0/24", 64777, T0 + 2) is None
+
+
+def test_origin_tracker_evicts_oldest_when_capped():
+    from routelens.aggregator import OriginTracker
+
+    tracker = OriginTracker(max_prefixes=100)
+    for i in range(150):
+        tracker.observe(f"10.{i}.0.0/16", 64500, T0 + i)
+
+    assert len(tracker) <= 100
+    # The most recent prefixes survive.
+    assert tracker.current_origin("10.149.0.0/16") == 64500
+    assert tracker.current_origin("10.0.0.0/16") is None
+
+
+def test_accumulator_records_confirmed_origin_changes_on_flush(tmp_path):
+    store = RouteLensStore(tmp_path / "agg4.db")
+    store.init_schema()
+    acc = ActivityAccumulator()
+
+    for i in range(3):
+        acc.ingest({**msg(T0 + i, ann_prefixes=["203.0.113.0/24"]), "path": [64444, 64500]})
+    acc.ingest({**msg(T0 + 10, ann_prefixes=["203.0.113.0/24"]), "path": [64444, 64666]})
+    acc.ingest({**msg(T0 + 20, ann_prefixes=["203.0.113.0/24"]), "path": [64445, 64666]})
+
+    acc.flush(store, now_ts=T0 + 30)
+
+    events = store.recent_origin_events(since="2026-07-14T00:00:00")
+    assert len(events) == 1
+    assert events[0]["prefix"] == "203.0.113.0/24"
+    assert events[0]["old_asn"] == 64500
+    assert events[0]["new_asn"] == 64666
