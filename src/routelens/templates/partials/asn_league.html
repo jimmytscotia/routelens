@@ -7,15 +7,15 @@
       <th class="num">Updates ({{ window_label }})</th><th class="num">Announced prefixes</th>
     </tr>
   </thead>
-  <tbody>
+  <tbody data-live="asn">
   {% for row in rows %}
-    <tr{% if row.country == 'GB' %} class="uk-row"{% endif %}>
-      <td class="num mono">{{ row.rank }}</td>
+    <tr data-key="{{ row.asn }}"{% if row.country == 'GB' %} class="uk-row"{% endif %}>
+      <td class="num mono c-rank">{{ row.rank }}</td>
       <td class="mono"><a href="/q?query=AS{{ row.asn }}">AS{{ row.asn }}</a>{% if row.country == 'GB' %}<span class="uk-tag">UK</span>{% endif %}</td>
       <td>{{ row.name or '—' }}</td>
       <td class="mono">{{ row.country }}</td>
-      <td class="num mono">{{ "{:,}".format(row.updates) }}</td>
-      <td class="num mono">{{ "{:,}".format(row.announcements) }}</td>
+      <td class="num mono c-upd" data-v="{{ row.updates }}">{{ "{:,}".format(row.updates) }}</td>
+      <td class="num mono c-ann" data-v="{{ row.announcements }}">{{ "{:,}".format(row.announcements) }}</td>
     </tr>
   {% endfor %}
   </tbody>

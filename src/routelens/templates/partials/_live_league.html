@@ -1,0 +1,120 @@
+{# Shared realtime layer for league tables. Include once per dashboard page.
+   Finds tbody[data-live] (mode: 'rrc' or 'asn'), subscribes to RIS Live in the
+   browser, ticks counters in place and FLIP-animates rank movement. The HTMX
+   60s refresh remains the reconciliation pass: the browser sees a subset of
+   collectors, so server truth periodically replaces the live-drifted numbers. #}
+<style>
+  td.tick{animation:cellTick 0.6s ease-out}
+  @keyframes cellTick{from{background:color-mix(in srgb,var(--accent) 22%,transparent)}to{background:transparent}}
+  tbody[data-live] tr{transition:transform .45s cubic-bezier(.22,1,.36,1)}
+  @media (prefers-reduced-motion: reduce){
+    td.tick{animation:none}
+    tbody[data-live] tr{transition:none}
+  }
+  .livebadge{font-family:var(--mono);font-size:.6875rem}
+  .livebadge.up{color:var(--ok)} .livebadge.down{color:var(--crit)} .livebadge.connecting{color:var(--warn)}
+</style>
+<script>
+(function () {
+  'use strict';
+  const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const HOSTS = ['rrc00', 'rrc01', 'rrc06', 'rrc11', 'rrc15', 'rrc19', 'rrc23'];
+  const badge = document.getElementById('livebadge');
+  let dirty = false;
+
+  function tbody() { return document.querySelector('tbody[data-live]'); }
+
+  function bump(row, cls, delta) {
+    const cell = row.querySelector('td.' + cls);
+    if (!cell || !delta) return;
+    const v = (parseInt(cell.dataset.v, 10) || 0) + delta;
+    cell.dataset.v = v;
+    cell.textContent = v.toLocaleString();
+    if (!REDUCED) {
+      cell.classList.remove('tick');
+      void cell.offsetWidth;   // restart the animation
+      cell.classList.add('tick');
+    }
+    dirty = true;
+  }
+
+  function handle(d) {
+    const body = tbody();
+    if (!body) return;
+    const mode = body.dataset.live;
+    const annCount = (d.announcements || []).reduce((n, a) => n + (a.prefixes || []).length, 0);
+    const wdrCount = (d.withdrawals || []).length;
+    let key;
+    if (mode === 'rrc') {
+      key = (d.host || '').split('.')[0];
+    } else {
+      const path = d.path || [];
+      const origin = path[path.length - 1];
+      if (!annCount || typeof origin !== 'number') return;
+      key = String(origin);
+    }
+    const row = body.querySelector('tr[data-key="' + key + '"]');
+    if (!row) return;   // outside the current top-N: the next server refresh handles it
+    bump(row, 'c-upd', 1);
+    bump(row, 'c-ann', annCount);
+    if (mode === 'rrc') bump(row, 'c-wdr', wdrCount);
+  }
+
+  // FLIP re-sort: capture positions, reorder by live count, animate the moves.
+  function resort() {
+    if (!dirty) return;
+    dirty = false;
+    const body = tbody();
+    if (!body) return;
+    const rows = Array.from(body.querySelectorAll('tr[data-key]'));
+    if (rows.length < 2) return;
+    const sorted = rows.slice().sort((a, b) =>
+      (parseInt(b.querySelector('td.c-upd')?.dataset.v, 10) || 0) -
+      (parseInt(a.querySelector('td.c-upd')?.dataset.v, 10) || 0));
+    if (sorted.every((r, i) => r === rows[i])) return;
+    const first = new Map(rows.map(r => [r, r.getBoundingClientRect().top]));
+    sorted.forEach(r => body.appendChild(r));
+    sorted.forEach((r, i) => {
+      const rank = r.querySelector('td.c-rank');
+      if (rank) rank.textContent = i + 1;
+      if (REDUCED) return;
+      const dy = first.get(r) - r.getBoundingClientRect().top;
+      if (!dy) return;
+      r.style.transition = 'none';
+      r.style.transform = 'translateY(' + dy + 'px)';
+      requestAnimationFrame(() => {
+        r.style.transition = '';
+        r.style.transform = '';
+      });
+    });
+  }
+  setInterval(resort, 2500);
+
+  let ws, retryMs = 1000;
+  function setBadge(cls, text) {
+    if (badge) { badge.className = 'livebadge ' + cls; badge.textContent = text; }
+  }
+  function connect() {
+    ws = new WebSocket('wss://ris-live.ripe.net/v1/ws/?client=routelens-league');
+    setBadge('connecting', 'connecting…');
+    ws.onopen = () => {
+      retryMs = 1000;
+      setBadge('up', 'live · sampled from ' + HOSTS.length + ' collectors');
+      for (const host of HOSTS) {
+        ws.send(JSON.stringify({type: 'ris_subscribe', data: {host, type: 'UPDATE'}}));
+      }
+    };
+    ws.onmessage = ev => {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === 'ris_message') handle(msg.data);
+    };
+    ws.onclose = () => {
+      setBadge('down', 'reconnecting…');
+      setTimeout(connect, retryMs);
+      retryMs = Math.min(retryMs * 2, 30000);
+    };
+    ws.onerror = () => ws.close();
+  }
+  connect();
+})();
+</script>

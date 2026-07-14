@@ -132,9 +132,9 @@ def create_app(config: dict | None = None) -> Flask:
 
     @app.context_processor
     def inject_dashboards():
-        from .dashboards import DASHBOARDS
+        from .dashboards import DASHBOARDS, nav
 
-        return {"dashboards": DASHBOARDS}
+        return {"dashboards": DASHBOARDS, "sitenav": nav()}
 
     @app.get("/dashboards/")
     def dashboards_index():

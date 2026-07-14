@@ -3,12 +3,25 @@
 {% block body %}
 <main class="wrap">
 {% if kind == 'invalid' %}
-  <div class="pagehead"><h1>Looking glass</h1></div>
+  <div class="pagehead">
+    <h1>Looking glass</h1>
+    <p>Query any prefix, IP, ASN or hostname across RIPEstat, RouteViews, NLNOG Ring and Globalping.</p>
+  </div>
   <section class="panel">
+    {% if raw and raw.strip() %}
     <div class="empty">
       <strong>Input not recognised.</strong>
       <p>Try a prefix (<code>8.8.8.0/24</code>), an IP (<code>1.1.1.1</code>), an ASN (<code>AS13335</code>) or a hostname (<code>dns.google</code>).</p>
     </div>
+    {% else %}
+    <div class="empty">
+      <strong>Enter a query in the search box above.</strong>
+      <p>Examples: <a href="/q?query=8.8.8.0/24" class="mono">8.8.8.0/24</a> ·
+         <a href="/q?query=1.1.1.1" class="mono">1.1.1.1</a> ·
+         <a href="/q?query=AS2856" class="mono">AS2856</a> ·
+         <a href="/q?query=nexthop.engineer" class="mono">nexthop.engineer</a></p>
+    </div>
+    {% endif %}
   </section>
 {% else %}
   <div class="pagehead">

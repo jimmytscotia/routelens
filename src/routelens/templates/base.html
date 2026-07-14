@@ -57,6 +57,29 @@
       font-weight:600;font-size:.8125rem;padding:7px 14px;border-radius:0 var(--r) var(--r) 0;cursor:pointer}
     .navsearch button:hover{filter:brightness(1.1)}
 
+    /* app shell: global sidebar + content */
+    .shell{display:grid;grid-template-columns:190px minmax(0,1fr);gap:22px;align-items:start}
+    .sidenav{position:sticky;top:68px;padding:16px 0}
+    .navgroup{margin-bottom:16px}
+    .navgroup h2{font-size:.625rem;font-weight:600;color:var(--faint);margin:0 0 4px;
+      padding:0 10px;text-transform:uppercase;letter-spacing:.07em}
+    .navgroup ul{list-style:none;margin:0;padding:0;font-size:.8125rem}
+    .navgroup li a,.navgroup li .planned{display:flex;justify-content:space-between;align-items:center;
+      gap:8px;padding:5px 10px;border-radius:var(--r);color:var(--muted)}
+    .navgroup li a:hover{color:var(--ink);background:var(--inset);text-decoration:none}
+    .navgroup li a[aria-current="page"]{color:var(--ink);background:var(--inset);font-weight:600}
+    .navgroup .planned{color:var(--faint);cursor:default}
+    .navgroup .planned em{font-style:normal;font-family:var(--mono);font-size:.5625rem;
+      border:1px solid var(--line);border-radius:999px;padding:1px 6px}
+    .content{min-width:0}
+    .content main.wrap{width:100%}
+    @media (max-width: 860px){
+      .shell{grid-template-columns:1fr}
+      .sidenav{position:static;padding:10px 0 0}
+      .navgroup{margin:0 0 6px}
+      .navgroup ul{display:flex;flex-wrap:wrap;gap:2px}
+    }
+
     /* page scaffolding */
     main.wrap{padding:20px 0 56px;display:flex;flex-direction:column;gap:14px}
     .pagehead{padding:22px 0 4px}
@@ -121,17 +144,34 @@
 <body>
   <nav class="nav"><div class="wrap navin">
     <a class="brand" href="/"><span class="livedot" aria-hidden="true"></span>RouteLens</a>
-    <div class="navlinks">
-      <a href="/" {% if request.path == '/' %}aria-current="page"{% endif %}>Pulse</a>
-      <a href="/dashboards/collectors" {% if request.path.startswith('/dashboards') %}aria-current="page"{% endif %}>Dashboards</a>
-    </div>
     <form class="navsearch" action="/q" method="get" role="search">
       <input type="search" name="query" placeholder="prefix / IP / ASN / hostname" aria-label="Query a prefix, IP, ASN or hostname"
              value="{{ request.args.get('query', '') if request.path == '/q' else '' }}">
       <button type="submit">Query</button>
     </form>
   </div></nav>
-  {% block body %}{% endblock %}
+  <div class="wrap shell">
+    <aside class="sidenav" aria-label="Site navigation">
+      {% for group in sitenav %}
+      <div class="navgroup">
+        <h2>{{ group.category }}</h2>
+        <ul>
+          {% for item in group['items'] %}
+          <li>
+            {% if item.status == 'live' %}
+              <a href="{{ item.url }}"
+                 {% if request.path == item.url or (item.url != '/' and request.path.startswith(item.url)) %}aria-current="page"{% endif %}>{{ item.title }}</a>
+            {% else %}
+              <span class="planned">{{ item.title }}<em>soon</em></span>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endfor %}
+    </aside>
+    <div class="content">{% block body %}{% endblock %}</div>
+  </div>
   <footer class="site"><div class="wrap">
     <span>NextHop Lab</span>
     <span>Data: RIPE RIS &amp; RIPEstat · RouteViews · NLNOG Ring · Globalping · Cloudflare Radar (CC BY-NC 4.0)</span>

@@ -8,17 +8,17 @@
       <th class="num">Announce</th><th class="num">Withdraw</th><th>Last hour</th>
     </tr>
   </thead>
-  <tbody>
+  <tbody data-live="rrc">
   {% for row in rows %}
-    <tr{% if row.country == 'GB' %} class="uk-row"{% endif %}>
-      <td class="num mono">{{ row.rank }}</td>
+    <tr data-key="{{ row.rrc }}"{% if row.country == 'GB' %} class="uk-row"{% endif %}>
+      <td class="num mono c-rank">{{ row.rank }}</td>
       <td class="mono">{{ row.rrc }}{% if row.country == 'GB' %}<span class="uk-tag">UK · LINX</span>{% endif %}</td>
       <td>{{ row.city }}{% if row.country %}, {{ row.country }}{% endif %}</td>
       <td class="mono">{{ row.scope }}</td>
-      <td class="num mono">{{ "{:,}".format(row.updates) }}</td>
+      <td class="num mono c-upd" data-v="{{ row.updates }}">{{ "{:,}".format(row.updates) }}</td>
       <td class="num mono">{{ "{:,}".format(row.per_minute) }}</td>
-      <td class="num mono">{{ "{:,}".format(row.announcements) }}</td>
-      <td class="num mono">{{ "{:,}".format(row.withdrawals) }}</td>
+      <td class="num mono c-ann" data-v="{{ row.announcements }}">{{ "{:,}".format(row.announcements) }}</td>
+      <td class="num mono c-wdr" data-v="{{ row.withdrawals }}">{{ "{:,}".format(row.withdrawals) }}</td>
       <td>{% if row.spark %}<svg width="120" height="24" aria-hidden="true"><polyline class="spark" points="{{ row.spark }}"/></svg>{% endif %}</td>
     </tr>
   {% endfor %}

@@ -63,32 +63,36 @@ def test_collector_league_partial_rejects_bad_window(tmp_path):
     assert client.get("/partials/dashboards/collectors?window=abc").status_code == 400
 
 
-def test_dashboard_pages_render_sidebar_with_all_dashboards(tmp_path):
+def test_all_pages_render_global_sidebar_with_categories(tmp_path):
     client = _app(tmp_path).test_client()
 
-    response = client.get("/dashboards/collectors")
-    body = response.data.decode()
+    for path in ("/", "/dashboards/collectors"):
+        body = client.get(path).data.decode()
+        assert 'class="sidenav"' in body, path
+        # Category headers group the navigation.
+        assert "Live" in body and "BGP activity" in body and "Routing table" in body, path
+        # Pulse and the looking glass are first-class destinations.
+        assert 'href="/"' in body and 'href="/q"' in body, path
+        # All ten roadmap dashboards are listed by title.
+        for title in [
+            "Collector activity", "ASN churn", "Prefix flaps", "Origin changes",
+            "RPKI scoreboard", "Address space", "ASN profiles", "Table growth",
+            "Transit centrality", "Country instability",
+        ]:
+            assert title in body, (path, title)
+        assert "soon" in body.lower(), path
 
-    assert response.status_code == 200
-    assert 'class="dashnav"' in body
-    # Live dashboards are links; the current one is marked.
-    assert 'aria-current="page"' in body
-    # All ten roadmap dashboards are listed by title.
-    for title in [
-        "Collector activity",
-        "ASN churn",
-        "Prefix flaps",
-        "Origin changes",
-        "RPKI scoreboard",
-        "Address space",
-        "ASN profiles",
-        "Table growth",
-        "Transit centrality",
-        "Country instability",
-    ]:
-        assert title in body
-    # Planned ones are labelled, not linked.
-    assert "soon" in body.lower()
+    # The current page is marked in the sidebar.
+    assert 'aria-current="page"' in client.get("/dashboards/collectors").data.decode()
+
+
+def test_bare_looking_glass_page_shows_prompt_not_error(tmp_path):
+    client = _app(tmp_path).test_client()
+
+    body = client.get("/q").data.decode()
+
+    assert "not recognised" not in body.lower()
+    assert "looking glass" in body.lower()
 
 
 def test_dashboards_index_redirects_to_first_live(tmp_path):
@@ -145,3 +149,29 @@ def test_sidebar_marks_asn_dashboard_live(tmp_path):
     body = client.get("/dashboards/collectors").data.decode()
 
     assert 'href="/dashboards/asns"' in body
+
+
+def test_league_partials_carry_live_markers(tmp_path):
+    app = _app(tmp_path)
+    store = app.config["ROUTELENS_STORE"]
+    store.record_activity_bucket(bucket_ts=_bucket(1), rrc="rrc01", updates=10, announcements=9, withdrawals=1)
+    store.record_asn_bucket(bucket_ts=_hour_bucket(0), asn=15169, updates=10, announcements=11)
+    client = app.test_client()
+
+    collectors = client.get("/partials/dashboards/collectors?window=3600").data.decode()
+    asns = client.get("/partials/dashboards/asns?window=21600").data.decode()
+
+    assert 'data-live="rrc"' in collectors
+    assert 'data-key="rrc01"' in collectors
+    assert 'class="num mono c-upd" data-v="10"' in collectors
+    assert 'data-live="asn"' in asns
+    assert 'data-key="15169"' in asns
+
+
+def test_dashboard_pages_include_live_league_script(tmp_path):
+    client = _app(tmp_path).test_client()
+
+    for path in ("/dashboards/collectors", "/dashboards/asns"):
+        body = client.get(path).data.decode()
+        assert "ris-live.ripe.net/v1/ws" in body, path
+        assert 'id="livebadge"' in body, path

@@ -17,7 +17,7 @@
           {{ label }}</button>
         {% endfor %}
       </div>
-      <span class="srctag">ris-live.ripe.net · 1-min buckets</span>
+      <span class="srctag"><span id="livebadge" class="livebadge connecting">connecting…</span> · 1-min buckets</span>
     </header>
     <div id="league"
          hx-get="/partials/dashboards/collectors?window=3600"
@@ -26,6 +26,7 @@
       <p class="loading">Loading…</p>
     </div>
   </section>
+  {% include "partials/_live_league.html" %}
 <style>
   .windowtabs{display:flex;gap:4px}
   .wtab{background:var(--inset);border:1px solid var(--line);color:var(--muted);
