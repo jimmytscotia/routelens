@@ -123,6 +123,7 @@
     <a class="brand" href="/"><span class="livedot" aria-hidden="true"></span>RouteLens</a>
     <div class="navlinks">
       <a href="/" {% if request.path == '/' %}aria-current="page"{% endif %}>Pulse</a>
+      <a href="/dashboards/collectors" {% if request.path.startswith('/dashboards') %}aria-current="page"{% endif %}>Dashboards</a>
     </div>
     <form class="navsearch" action="/q" method="get" role="search">
       <input type="search" name="query" placeholder="prefix / IP / ASN / hostname" aria-label="Query a prefix, IP, ASN or hostname"

@@ -8,6 +8,7 @@ dependencies = [
   "dnspython>=2.6",
   "requests>=2.32",
   "gunicorn>=22.0",
+  "websockets>=16.1",
 ]
 
 [project.scripts]
@@ -24,4 +25,4 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 
 [tool.setuptools.package-data]
-routelens = ["templates/*.html", "templates/partials/*.html"]
+routelens = ["templates/*.html", "templates/partials/*.html", "templates/dashboards/*.html"]

@@ -9,6 +9,17 @@ from .sources import SourceClient
 from .store import RouteLensStore
 
 
+def _sparkline_points(values: list[int], width: int = 120, height: int = 24) -> str:
+    """SVG polyline points for a compact activity sparkline."""
+    if len(values) < 2:
+        return ""
+    peak = max(max(values), 1)
+    step = width / (len(values) - 1)
+    return " ".join(
+        f"{i * step:.1f},{height - (v / peak) * (height - 2) - 1:.1f}" for i, v in enumerate(values)
+    )
+
+
 def _default_resolver(hostname: str) -> list[str]:
     import dns.resolver
 
@@ -116,6 +127,52 @@ def create_app(config: dict | None = None) -> Flask:
     @app.get("/partials/radar")
     def partial_radar():
         return render_template("partials/radar_panel.html", result=sources().radar_events())
+
+    ALLOWED_WINDOWS = {900: "15 min", 3600: "1 hour", 21600: "6 hours", 86400: "24 hours"}
+
+    @app.get("/dashboards/collectors")
+    def dashboard_collectors():
+        return render_template("dashboards/collectors.html", windows=ALLOWED_WINDOWS)
+
+    @app.get("/partials/dashboards/collectors")
+    def partial_dashboard_collectors():
+        from datetime import datetime, timedelta, timezone
+
+        from .collectors import ACTIVE_COLLECTORS
+
+        try:
+            window = int(request.args.get("window", "3600"))
+        except ValueError:
+            abort(400)
+        if window not in ALLOWED_WINDOWS:
+            abort(400)
+
+        now = datetime.now(timezone.utc)
+        since = (now - timedelta(seconds=window)).strftime("%Y-%m-%dT%H:%M:%S")
+        league = store.activity_league(since=since)
+        meta = {c["rrc"]: c for c in ACTIVE_COLLECTORS}
+        spark_since = (now - timedelta(minutes=60)).strftime("%Y-%m-%dT%H:%M:%S")
+        rows = []
+        for rank, entry in enumerate(league, start=1):
+            info = meta.get(entry["rrc"], {})
+            series = store.activity_series(rrc=entry["rrc"], since=spark_since)
+            rows.append(
+                {
+                    **entry,
+                    "rank": rank,
+                    "city": info.get("city", "?"),
+                    "country": info.get("country", ""),
+                    "scope": info.get("scope", ""),
+                    "per_minute": round(entry["updates"] / max(entry["minutes"], 1)),
+                    "spark": _sparkline_points([v for _, v in series]),
+                }
+            )
+        return render_template(
+            "partials/collector_league.html",
+            rows=rows,
+            window=window,
+            window_label=ALLOWED_WINDOWS[window],
+        )
 
     @app.post("/api/globalping")
     def api_globalping_create():

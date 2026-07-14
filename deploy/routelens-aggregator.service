@@ -1,0 +1,21 @@
+[Unit]
+Description=RouteLens RIS Live activity aggregator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lab
+Group=lab
+WorkingDirectory=/opt/routelens
+Environment=ROUTELENS_DATABASE=/var/lib/routelens/routelens.db
+Environment=ROUTELENS_RETENTION_DAYS=7
+ExecStart=/opt/routelens/.venv/bin/python -m routelens.aggregator
+Restart=always
+RestartSec=5
+# The stream is bursty but the process is tiny; cap it defensively.
+MemoryMax=256M
+CPUQuota=50%
+
+[Install]
+WantedBy=multi-user.target

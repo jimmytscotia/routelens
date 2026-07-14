@@ -41,6 +41,16 @@ CREATE TABLE IF NOT EXISTS api_cache (
   payload_json TEXT NOT NULL,
   fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS ris_activity (
+  bucket_ts TEXT NOT NULL,           -- minute bucket, ISO8601 UTC
+  rrc TEXT NOT NULL,                 -- collector short id, e.g. 'rrc01'
+  updates INTEGER NOT NULL DEFAULT 0,
+  announcements INTEGER NOT NULL DEFAULT 0,
+  withdrawals INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (bucket_ts, rrc)
+);
+CREATE INDEX IF NOT EXISTS idx_ris_activity_rrc_time ON ris_activity(rrc, bucket_ts);
 """
 
 
@@ -216,6 +226,58 @@ class RouteLensStore:
                 """,
                 (cache_key, json.dumps(payload, sort_keys=True)),
             )
+
+    def record_activity_bucket(
+        self, *, bucket_ts: str, rrc: str, updates: int, announcements: int, withdrawals: int
+    ) -> None:
+        """Idempotent flush: re-writing the same (bucket, rrc) replaces counts."""
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO ris_activity(bucket_ts, rrc, updates, announcements, withdrawals)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(bucket_ts, rrc) DO UPDATE
+                   SET updates = excluded.updates,
+                       announcements = excluded.announcements,
+                       withdrawals = excluded.withdrawals
+                """,
+                (bucket_ts, rrc, updates, announcements, withdrawals),
+            )
+
+    def activity_league(self, *, since: str) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT rrc,
+                       SUM(updates) AS updates,
+                       SUM(announcements) AS announcements,
+                       SUM(withdrawals) AS withdrawals,
+                       COUNT(*) AS minutes
+                  FROM ris_activity
+                 WHERE bucket_ts >= ?
+                 GROUP BY rrc
+                 ORDER BY updates DESC
+                """,
+                (since,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def activity_series(self, *, rrc: str, since: str) -> list[tuple[str, int]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT bucket_ts, updates FROM ris_activity
+                 WHERE rrc = ? AND bucket_ts >= ?
+                 ORDER BY bucket_ts
+                """,
+                (rrc, since),
+            ).fetchall()
+        return [(row["bucket_ts"], row["updates"]) for row in rows]
+
+    def prune_activity(self, *, before: str) -> int:
+        with self.connect() as conn:
+            cur = conn.execute("DELETE FROM ris_activity WHERE bucket_ts < ?", (before,))
+            return cur.rowcount
 
     @staticmethod
     def _resource_dict(row: sqlite3.Row) -> dict[str, Any]:

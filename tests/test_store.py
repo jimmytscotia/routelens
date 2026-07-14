@@ -65,3 +65,60 @@ def test_api_cache_set_overwrites_existing_key(tmp_path):
     store.cache_set("k", {"v": 2})
 
     assert store.cache_get("k", max_age_seconds=60) == {"v": 2}
+
+
+def test_activity_buckets_upsert_and_league(tmp_path):
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "activity.db")
+    store.init_schema()
+
+    store.record_activity_bucket(
+        bucket_ts="2026-07-14T13:00:00", rrc="rrc01", updates=120, announcements=100, withdrawals=20
+    )
+    store.record_activity_bucket(
+        bucket_ts="2026-07-14T13:01:00", rrc="rrc01", updates=80, announcements=70, withdrawals=10
+    )
+    store.record_activity_bucket(
+        bucket_ts="2026-07-14T13:00:00", rrc="rrc06", updates=300, announcements=280, withdrawals=20
+    )
+    # Same bucket re-flushed with a higher count wins (idempotent upsert).
+    store.record_activity_bucket(
+        bucket_ts="2026-07-14T13:00:00", rrc="rrc06", updates=310, announcements=290, withdrawals=20
+    )
+
+    league = store.activity_league(since="2026-07-14T12:59:00")
+
+    assert [row["rrc"] for row in league] == ["rrc06", "rrc01"]
+    assert league[0]["updates"] == 310
+    assert league[1]["updates"] == 200
+    assert league[1]["announcements"] == 170
+    assert league[1]["withdrawals"] == 30
+    assert league[1]["minutes"] == 2
+
+
+def test_activity_series_returns_per_minute_counts(tmp_path):
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "activity.db")
+    store.init_schema()
+    store.record_activity_bucket(bucket_ts="2026-07-14T13:00:00", rrc="rrc01", updates=5, announcements=5, withdrawals=0)
+    store.record_activity_bucket(bucket_ts="2026-07-14T13:02:00", rrc="rrc01", updates=9, announcements=8, withdrawals=1)
+
+    series = store.activity_series(rrc="rrc01", since="2026-07-14T12:59:00")
+
+    assert series == [("2026-07-14T13:00:00", 5), ("2026-07-14T13:02:00", 9)]
+
+
+def test_activity_prune_removes_old_buckets(tmp_path):
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "activity.db")
+    store.init_schema()
+    store.record_activity_bucket(bucket_ts="2026-07-01T00:00:00", rrc="rrc01", updates=1, announcements=1, withdrawals=0)
+    store.record_activity_bucket(bucket_ts="2026-07-14T13:00:00", rrc="rrc01", updates=2, announcements=2, withdrawals=0)
+
+    removed = store.prune_activity(before="2026-07-07T00:00:00")
+
+    assert removed == 1
+    assert store.activity_league(since="2026-01-01T00:00:00")[0]["updates"] == 2
