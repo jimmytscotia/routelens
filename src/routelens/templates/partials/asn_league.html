@@ -3,10 +3,13 @@
 <table class="datatable">
   <thead>
     <tr>
-      <th class="num">#</th><th>Origin AS</th><th>Operator</th><th>CC</th>
-      <th class="num">Announced prefixes ({{ window_label }})</th>
-      <th class="num">Distinct prefixes (peak hour)</th>
-      <th>Pattern</th>
+      <th class="num" title="Rank by announced prefixes in the selected window">#</th>
+      <th title="The autonomous system announcing the routes — the origin AS at the end of each BGP path. Click to open in the looking glass.">Origin AS</th>
+      <th title="Operator name from the bgp.tools ASN registry, refreshed daily">Operator</th>
+      <th title="Registration country of the ASN (allocation-based, not traffic location), from bgp.tools">CC</th>
+      <th class="num" title="Total prefixes announced in BGP UPDATE messages originated by this AS in the window. Counts events, so the same prefix re-announced 100 times counts 100.">Announced prefixes ({{ window_label }})</th>
+      <th class="num" title="How many different prefixes were involved, in the busiest single hour. Compare with announced prefixes: few distinct = repetition (flapping); many distinct = broad change.">Distinct prefixes (peak hour)</th>
+      <th title="Heuristic read of the announcements-to-distinct ratio. Hover each badge for its meaning.">Pattern</th>
     </tr>
   </thead>
   <tbody data-live="asn">
@@ -19,9 +22,9 @@
       <td class="num mono c-ann" data-v="{{ row.announcements }}">{{ "{:,}".format(row.announcements) }}</td>
       <td class="num mono">{{ "{:,}".format(row.peak_distinct) }}</td>
       <td>{% if row.peak_distinct and row.announcements / row.peak_distinct > 20 %}
-            <span class="badge warning">flappy</span>
+            <span class="badge warning" title="Many announcements concentrated on few prefixes — the same routes are being re-announced repeatedly. Usually route instability (flapping): a bouncing link or BGP session, or aggressive traffic engineering.">flappy</span>
           {% elif row.peak_distinct > 500 %}
-            <span class="badge unknown">estate-wide</span>
+            <span class="badge unknown" title="Announcements spread across many distinct prefixes — a broad one-off event such as a full re-announcement after a BGP session reset, maintenance, or an estate-wide policy change. Not instability.">estate-wide</span>
           {% endif %}</td>
     </tr>
   {% endfor %}

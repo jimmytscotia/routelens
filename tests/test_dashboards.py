@@ -175,3 +175,42 @@ def test_dashboard_pages_include_live_league_script(tmp_path):
         body = client.get(path).data.decode()
         assert "ris-live.ripe.net/v1/ws" in body, path
         assert 'id="livebadge"' in body, path
+
+
+def test_asn_pattern_badges_carry_explanatory_tooltips(tmp_path):
+    app = _app(tmp_path)
+    store = app.config["ROUTELENS_STORE"]
+    # 950 announcements over 10 distinct prefixes -> flappy (ratio > 20).
+    store.record_asn_bucket(bucket_ts=_hour_bucket(0), asn=64500, updates=900, announcements=950, distinct=10)
+    # Spread across 600 distinct prefixes -> estate-wide.
+    store.record_asn_bucket(bucket_ts=_hour_bucket(0), asn=64501, updates=700, announcements=700, distinct=600)
+    client = app.test_client()
+
+    body = client.get("/partials/dashboards/asns?window=21600").data.decode()
+
+    assert 'class="badge warning" title="' in body
+    assert "instability" in body
+    assert 'class="badge unknown" title="' in body
+    assert "re-announcement" in body
+    # The column header explains the heuristic too.
+    assert '<th title="' in body
+
+
+def test_league_column_headers_carry_tooltips(tmp_path):
+    app = _app(tmp_path)
+    store = app.config["ROUTELENS_STORE"]
+    store.record_activity_bucket(bucket_ts=_bucket(1), rrc="rrc01", updates=10, announcements=9, withdrawals=1)
+    store.record_asn_bucket(bucket_ts=_hour_bucket(0), asn=15169, updates=10, announcements=11, distinct=5)
+    client = app.test_client()
+
+    asns = client.get("/partials/dashboards/asns?window=21600").data.decode()
+    collectors = client.get("/partials/dashboards/collectors?window=3600").data.decode()
+
+    # Every data column in the ASN league explains itself on hover.
+    for phrase in ("origin AS", "bgp.tools", "distinct", "BGP UPDATE"):
+        assert phrase in asns, phrase
+    assert asns.count('title="') >= 7
+    # Same for the collector league.
+    for phrase in ("route collector", "peers", "withdraw"):
+        assert phrase in collectors, phrase
+    assert collectors.count('title="') >= 9

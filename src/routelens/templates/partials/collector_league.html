@@ -3,9 +3,15 @@
 <table class="datatable">
   <thead>
     <tr>
-      <th class="num">#</th><th>Collector</th><th>Location</th><th>Exchange</th>
-      <th class="num">Updates ({{ window_label }})</th><th class="num">/min</th>
-      <th class="num">Announce</th><th class="num">Withdraw</th><th>Last hour</th>
+      <th class="num" title="Rank by BGP updates received in the selected window">#</th>
+      <th title="RIPE RIS route collector — a listening post peering with many networks at an Internet exchange. RRC01 sits at LINX in London.">Collector</th>
+      <th title="City where the route collector is physically located">Location</th>
+      <th title="The Internet exchange point(s) or multihop scope the collector peers at">Exchange</th>
+      <th class="num" title="BGP UPDATE messages this collector received from its peers in the window. Reflects both regional routing churn and how many peers the collector has.">Updates ({{ window_label }})</th>
+      <th class="num" title="Average updates per minute across the window">/min</th>
+      <th class="num" title="Prefixes announced (new or changed routes) within those updates">Announce</th>
+      <th class="num" title="Prefixes withdrawn (reachability removed) within those updates">Withdraw</th>
+      <th title="Updates per minute over the last hour, as a trend line">Last hour</th>
     </tr>
   </thead>
   <tbody data-live="rrc">
