@@ -1,17 +1,19 @@
 {% extends "base.html" %}
 {% block title %}RouteLens · live BGP pulse{% endblock %}
 {% block extra_head %}
-<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" defer
-        onerror="this.dataset.failed=1"></script>
+{# Leaflet, not MapLibre: MapLibre requires WebGL, which is unavailable in
+   some environments (GPU acceleration off, remote desktops). Leaflet renders
+   raster tiles with plain DOM — works everywhere. #}
+<link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
 <script>
   // Fallback CDN if unpkg fails or is blocked.
   window.addEventListener('load', () => {
-    if (typeof maplibregl !== 'undefined') return;
+    if (typeof L !== 'undefined') return;
     const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.min.js';
-    s.onload = () => window.dispatchEvent(new Event('maplibre-ready'));
-    s.onerror = () => window.dispatchEvent(new Event('maplibre-failed'));
+    s.src = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js';
+    s.onload = () => window.dispatchEvent(new Event('leaflet-ready'));
+    s.onerror = () => window.dispatchEvent(new Event('leaflet-failed'));
     document.head.appendChild(s);
   });
 </script>
@@ -19,8 +21,13 @@
   .pulsegrid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:14px;align-items:start}
   @media (max-width: 980px){.pulsegrid{grid-template-columns:1fr}}
   #pulse-map{height:520px;border-radius:var(--r);border:1px solid var(--line);background:var(--inset)}
-  .maplibregl-ctrl-attrib{background:rgba(11,14,19,.75)!important;color:var(--faint)}
-  .maplibregl-ctrl-attrib a{color:var(--muted)!important}
+  .leaflet-container{background:var(--inset);font:inherit}
+  .leaflet-control-attribution{background:rgba(11,14,19,.75)!important;color:var(--faint)!important;font-size:.625rem}
+  .leaflet-control-attribution a{color:var(--muted)!important}
+  .leaflet-bar a{background:var(--surface)!important;color:var(--ink)!important;border-color:var(--line)!important}
+  .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--surface);color:var(--ink);
+    border:1px solid var(--line-strong);box-shadow:none}
+  .leaflet-popup-content{font:.75rem/1.5 var(--mono);margin:8px 12px}
 
   .counters{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px}
   .counter{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 14px}
@@ -45,6 +52,7 @@
 
   .marker{width:10px;height:10px;border-radius:50%;background:var(--accent);
     border:1px solid #cfeaff;cursor:pointer}
+  .marker.dim{background:var(--faint);border-color:var(--line-strong)}
   .marker.flash{background:#fff;box-shadow:0 0 0 6px rgba(56,168,255,.35)}
   @media (prefers-reduced-motion: no-preference){
     .marker{transition:box-shadow .5s ease-out,background .5s ease-out}
@@ -64,7 +72,7 @@
     <div class="counter"><b id="c-rate">0</b><span>updates / second</span><span class="sub" id="c-rate-peak"></span></div>
     <div class="counter"><b id="c-ann">0</b><span>announcements</span></div>
     <div class="counter"><b id="c-wdr">0</b><span>withdrawals</span></div>
-    <div class="counter"><b id="c-rrcs">0<span class="sub">/23</span></b><span>collectors heard from</span></div>
+    <div class="counter"><b id="c-rrcs">0<span class="sub">/7</span></b><span>subscribed collectors reporting</span><span class="sub">bright dots on the map</span></div>
   </div>
 
   <div class="pulsegrid">
@@ -98,59 +106,49 @@
       '<p class="err" style="padding:14px">Map unavailable: ' + reason + '</p>';
   }
   function initMap(collectors) {
-    if (typeof maplibregl === 'undefined') {
-      mapFail('the MapLibre library failed to load from both CDNs');
+    if (typeof L === 'undefined') {
+      mapFail('the Leaflet library failed to load from both CDNs');
       return;
     }
-    map = new maplibregl.Map({
-      container: 'pulse-map',
-      style: {
-        version: 8,
-        sources: {
-          carto: {
-            type: 'raster',
-            tiles: ['https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}@2x.png',
-                    'https://b.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}@2x.png'],
-            tileSize: 256,
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-          },
-        },
-        layers: [{id: 'carto', type: 'raster', source: 'carto'}],
-      },
-      center: [10, 25], zoom: 1.4, attributionControl: false,
+    map = L.map('pulse-map', {
+      center: [25, 10], zoom: 2, minZoom: 1, maxZoom: 8,
+      zoomSnap: 0.5, worldCopyJump: true, zoomControl: true,
     });
-    map.addControl(new maplibregl.AttributionControl({compact: true}));
-    map.addControl(new maplibregl.NavigationControl({showCompass: false}), 'top-right');
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}@2x.png', {
+      subdomains: 'abcd', tileSize: 256,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    }).addTo(map);
     for (const c of collectors) {
-      const el = document.createElement('div');
-      el.className = 'marker';
-      el.title = `${c.rrc.toUpperCase()} — ${c.city} (${c.scope})`;
-      const marker = new maplibregl.Marker({element: el})
-        .setLngLat([c.lon, c.lat])
-        .setPopup(new maplibregl.Popup({offset: 12})
-          .setText(`${c.rrc.toUpperCase()} · ${c.city}, ${c.country} · ${c.scope}`))
+      const subscribed = HOSTS.includes(c.rrc);
+      const icon = L.divIcon({
+        className: 'marker' + (subscribed ? '' : ' dim'),
+        iconSize: [10, 10],
+      });
+      const marker = L.marker([c.lat, c.lon], {icon, title: `${c.rrc.toUpperCase()} — ${c.city}`})
+        .bindPopup(`${c.rrc.toUpperCase()} · ${c.city}, ${c.country} · ${c.scope}` +
+                   (subscribed ? '' : ' · not in the live subscription'))
         .addTo(map);
-      state.markers[c.rrc] = {marker, el, timeout: null};
+      state.markers[c.rrc] = {marker, el: marker.getElement(), timeout: null};
     }
   }
-  // Wait for the deferred maplibre script: inline scripts run before deferred
-  // ones, so fetching immediately races and finds maplibregl undefined.
+  // Wait for the deferred leaflet script: inline scripts run before deferred
+  // ones, so fetching immediately races and finds L undefined.
   function startMap() {
     fetch('/api/collectors')
       .then(r => r.json())
       .then(d => { try { initMap(d.collectors); } catch (e) { mapFail(e.message); } })
       .catch(e => mapFail('collector list failed: ' + e.message));
   }
-  if (document.readyState === 'complete' && typeof maplibregl !== 'undefined') {
+  if (document.readyState === 'complete' && typeof L !== 'undefined') {
     startMap();
   } else {
     window.addEventListener('load', () => {
-      if (typeof maplibregl !== 'undefined') startMap();
+      if (typeof L !== 'undefined') startMap();
       // else the fallback loader in <head> takes over and fires one of:
     });
-    window.addEventListener('maplibre-ready', startMap);
-    window.addEventListener('maplibre-failed', () =>
-      mapFail('the MapLibre library failed to load from both CDNs'));
+    window.addEventListener('leaflet-ready', startMap);
+    window.addEventListener('leaflet-failed', () =>
+      mapFail('the Leaflet library failed to load from both CDNs'));
   }
 
   function flash(rrc) {
@@ -245,7 +243,7 @@
     $('c-rate-peak').textContent = state.peak ? `peak ${state.peak.toFixed(0)}/s` : '';
     $('c-ann').textContent = state.ann.toLocaleString();
     $('c-wdr').textContent = state.wdr.toLocaleString();
-    $('c-rrcs').innerHTML = state.rrcsSeen.size + '<span class="sub">/23</span>';
+    $('c-rrcs').innerHTML = state.rrcsSeen.size + '<span class="sub">/' + HOSTS.length + '</span>';
   }, 1000);
 
   connect();
