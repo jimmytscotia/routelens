@@ -20,7 +20,21 @@
 <style>
   .pulsegrid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:14px;align-items:start}
   @media (max-width: 980px){.pulsegrid{grid-template-columns:1fr}}
-  #pulse-map{height:520px;border-radius:var(--r);border:1px solid var(--line);background:var(--inset)}
+  #pulse-map{height:520px;border-radius:0 0 var(--r) var(--r);border:1px solid var(--line);
+    border-top:0;background:var(--inset)}
+  .mapbar{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:8px 10px;
+    background:var(--surface2);border:1px solid var(--line);border-radius:var(--r) var(--r) 0 0}
+  .mapbar .lyr,#uk-btn{background:var(--inset);border:1px solid var(--line);color:var(--muted);
+    font:inherit;font-size:.75rem;padding:4px 10px;border-radius:var(--r);cursor:pointer}
+  .mapbar .lyr:hover,#uk-btn:hover{color:var(--ink)}
+  .mapbar .lyr.active{color:var(--ink);border-color:var(--accent)}
+  .mapbar .note{margin-left:auto;font-family:var(--mono);font-size:.625rem;color:var(--faint)}
+  #uk-btn{margin-left:8px}
+  #map-legend{position:absolute;bottom:22px;left:10px;z-index:800;background:rgba(11,14,19,.85);
+    border:1px solid var(--line);border-radius:var(--r);padding:6px 10px;
+    font-family:var(--mono);font-size:.625rem;color:var(--muted);display:none}
+  #map-legend .sw{display:inline-block;width:10px;height:10px;border-radius:2px;
+    vertical-align:-1px;margin-right:4px}
   .leaflet-container{background:var(--inset);font:inherit}
   .leaflet-control-attribution{background:rgba(11,14,19,.75)!important;color:var(--faint)!important;font-size:.625rem}
   .leaflet-control-attribution a{color:var(--muted)!important}
@@ -28,6 +42,7 @@
   .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--surface);color:var(--ink);
     border:1px solid var(--line-strong);box-shadow:none}
   .leaflet-popup-content{font:.75rem/1.5 var(--mono);margin:8px 12px}
+  .leaflet-popup-content a{color:var(--accent-ink)}
 
   .counters{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px}
   .counter{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 14px}
@@ -50,9 +65,8 @@
   .tickerhead .conn{font-family:var(--mono);font-size:.6875rem}
   .conn.up{color:var(--ok)} .conn.down{color:var(--crit)} .conn.connecting{color:var(--warn)}
 
-  .marker{width:10px;height:10px;border-radius:50%;background:var(--accent);
-    border:1px solid #cfeaff;cursor:pointer}
-  .marker.dim{background:var(--faint);border-color:var(--line-strong)}
+  .marker{border-radius:50%;background:var(--accent);border:1px solid #cfeaff;cursor:pointer}
+  .marker.quiet{background:var(--faint);border-color:var(--line-strong)}
   .marker.flash{background:#fff;box-shadow:0 0 0 6px rgba(56,168,255,.35)}
   @media (prefers-reduced-motion: no-preference){
     .marker{transition:box-shadow .5s ease-out,background .5s ease-out}
@@ -72,11 +86,21 @@
     <div class="counter"><b id="c-rate">0</b><span>updates / second</span><span class="sub" id="c-rate-peak"></span></div>
     <div class="counter"><b id="c-ann">0</b><span>announcements</span></div>
     <div class="counter"><b id="c-wdr">0</b><span>withdrawals</span></div>
-    <div class="counter"><b id="c-rrcs">0<span class="sub">/7</span></b><span>subscribed collectors reporting</span><span class="sub">bright dots on the map</span></div>
+    <div class="counter"><b id="c-rrcs">0<span class="sub">/7</span></b><span>subscribed collectors reporting</span><span class="sub">flashing dots on the map</span></div>
   </div>
 
   <div class="pulsegrid">
-    <div id="pulse-map" aria-label="World map of RIPE RIS route collectors"></div>
+    <div style="min-width:0;position:relative">
+      <div class="mapbar" role="tablist" aria-label="Map layer">
+        <button class="lyr active" data-layer="collectors" role="tab" title="RIS collectors sized by how many updates each received in the last hour">Collector load</button>
+        <button class="lyr" data-layer="churn" role="tab" title="Countries shaded by announcement churn per active origin network over the last 6 hours">Country churn</button>
+        <button class="lyr" data-layer="events" role="tab" title="Origin changes and flapping prefixes from the last 6 hours, plotted at their origin country">Events</button>
+        <button id="uk-btn" title="Zoom to the UK">UK</button>
+        <span class="note" id="map-note">collector load · last hour</span>
+      </div>
+      <div id="pulse-map" aria-label="World map of BGP activity"></div>
+      <div id="map-legend"></div>
+    </div>
     <section class="panel">
       <header class="phead tickerhead">
         <h2>Update feed</h2>
@@ -85,6 +109,9 @@
       <ul id="ticker" aria-label="Live BGP update feed"></ul>
     </section>
   </div>
+  <p class="attribution">Country layers use each origin network's registration country (allocation data,
+     not measured traffic location). Churn shading uses intensity — announcements per active origin —
+     so small countries with real trouble outshine big countries being merely busy.</p>
 </main>
 
 <script>
@@ -99,53 +126,191 @@
   };
   const $ = id => document.getElementById(id);
 
-  // ---- map ----------------------------------------------------------------
-  let map = null;
+  // ---- map ------------------------------------------------------------------
+  let map = null, world = null, centroids = {};
+  const layers = {collectors: null, churn: null, events: null};
+  let activeLayer = 'collectors';
+  const NOTES = {
+    collectors: 'collector load · last hour',
+    churn: 'churn intensity by country · last 6h',
+    events: 'origin changes & flaps · last 6h',
+  };
+
   function mapFail(reason) {
-    document.getElementById('pulse-map').innerHTML =
+    $('pulse-map').innerHTML =
       '<p class="err" style="padding:14px">Map unavailable: ' + reason + '</p>';
   }
-  function initMap(collectors) {
+
+  function initMap() {
     if (typeof L === 'undefined') {
       mapFail('the Leaflet library failed to load from both CDNs');
       return;
     }
     map = L.map('pulse-map', {
       center: [25, 10], zoom: 2, minZoom: 1, maxZoom: 8,
-      zoomSnap: 0.5, worldCopyJump: true, zoomControl: true,
+      zoomSnap: 0.5, worldCopyJump: true,
     });
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}@2x.png', {
       subdomains: 'abcd', tileSize: 256,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
     }).addTo(map);
-    for (const c of collectors) {
-      const subscribed = HOSTS.includes(c.rrc);
-      const icon = L.divIcon({
-        className: 'marker' + (subscribed ? '' : ' dim'),
-        iconSize: [10, 10],
-      });
-      const marker = L.marker([c.lat, c.lon], {icon, title: `${c.rrc.toUpperCase()} — ${c.city}`})
-        .bindPopup(`${c.rrc.toUpperCase()} · ${c.city}, ${c.country} · ${c.scope}` +
-                   (subscribed ? '' : ' · not in the live subscription'))
-        .addTo(map);
-      state.markers[c.rrc] = {marker, el: marker.getElement(), timeout: null};
+    $('uk-btn').addEventListener('click', () => map.setView([54.5, -3.4], 5));
+    document.querySelectorAll('.mapbar .lyr').forEach(btn => {
+      btn.addEventListener('click', () => switchLayer(btn.dataset.layer, btn));
+    });
+    fetch('/static/world.geojson').then(r => r.json()).then(geo => {
+      world = geo;
+      for (const f of geo.features) {
+        centroids[f.properties.iso2] = L.geoJSON(f).getBounds().getCenter();
+      }
+    });
+    showCollectors();
+    setInterval(refreshActiveLayer, 60000);
+  }
+
+  function switchLayer(name, btn) {
+    document.querySelectorAll('.mapbar .lyr').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeLayer = name;
+    $('map-note').textContent = NOTES[name];
+    refreshActiveLayer();
+  }
+
+  function clearLayers() {
+    for (const key of Object.keys(layers)) {
+      if (layers[key]) { map.removeLayer(layers[key]); layers[key] = null; }
     }
+    state.markers = {};
+    $('map-legend').style.display = 'none';
   }
-  // Wait for the deferred leaflet script: inline scripts run before deferred
-  // ones, so fetching immediately races and finds L undefined.
-  function startMap() {
-    fetch('/api/collectors')
+
+  function refreshActiveLayer() {
+    if (!map) return;
+    if (activeLayer === 'collectors') showCollectors();
+    else if (activeLayer === 'churn') showChurn();
+    else showEvents();
+  }
+
+  // Layer 1: collectors sized by real load (all 23, from the aggregator).
+  function showCollectors() {
+    fetch('/api/map/collectors?window=3600')
       .then(r => r.json())
-      .then(d => { try { initMap(d.collectors); } catch (e) { mapFail(e.message); } })
-      .catch(e => mapFail('collector list failed: ' + e.message));
+      .then(d => {
+        if (activeLayer !== 'collectors') return;
+        clearLayers();
+        const group = L.layerGroup();
+        for (const c of d.collectors) {
+          const size = Math.max(7, Math.min(26, 7 + Math.sqrt(c.per_minute)));
+          const el = document.createElement('div');
+          el.className = 'marker' + (c.per_minute ? '' : ' quiet');
+          const icon = L.divIcon({className: '', html: el, iconSize: [size, size]});
+          el.style.width = el.style.height = size + 'px';
+          const marker = L.marker([c.lat, c.lon], {icon, title: `${c.rrc.toUpperCase()} — ${c.city}`})
+            .bindPopup(`${c.rrc.toUpperCase()} · ${c.city}, ${c.country} · ${c.scope}<br>` +
+                       `${c.updates.toLocaleString()} updates last hour (${c.per_minute.toLocaleString()}/min)`)
+            .addTo(group);
+          state.markers[c.rrc] = {marker, el, timeout: null};
+        }
+        layers.collectors = group.addTo(map);
+      })
+      .catch(e => mapFail('collector data failed: ' + e.message));
   }
+
+  // Layer 2: country churn choropleth (intensity-shaded).
+  const BUCKETS = [
+    {min: 0,    color: '#16324e'},
+    {min: 50,   color: '#1d5c8f'},
+    {min: 200,  color: '#2f8fbe'},
+    {min: 800,  color: '#f0c249'},
+    {min: 3000, color: '#ff5d6e'},
+  ];
+  function bucketColor(intensity) {
+    let color = BUCKETS[0].color;
+    for (const b of BUCKETS) if (intensity >= b.min) color = b.color;
+    return color;
+  }
+  function showChurn() {
+    if (!world) { setTimeout(showChurn, 300); return; }
+    fetch('/api/map/countries?window=21600')
+      .then(r => r.json())
+      .then(d => {
+        if (activeLayer !== 'churn') return;
+        clearLayers();
+        const byIso = {};
+        for (const c of d.countries) byIso[c.country] = c;
+        layers.churn = L.geoJSON(world, {
+          style: f => {
+            const row = byIso[f.properties.iso2];
+            return {
+              weight: 0.5, color: '#2c3949',
+              fillColor: row ? bucketColor(row.intensity) : '#10141b',
+              fillOpacity: row ? 0.75 : 0.25,
+            };
+          },
+          onEachFeature: (f, layer) => {
+            const row = byIso[f.properties.iso2];
+            layer.bindPopup(row
+              ? `${f.properties.name}<br>${row.announcements.toLocaleString()} announcements · ` +
+                `${row.origins.toLocaleString()} active origins<br>intensity ${row.intensity.toLocaleString()}/origin`
+              : `${f.properties.name}<br>no recorded churn`);
+          },
+        }).addTo(map);
+        const legend = $('map-legend');
+        legend.innerHTML = 'intensity (ann/origin) ' + BUCKETS.map(b =>
+          `<span class="sw" style="background:${b.color}"></span>${b.min}+`).join(' ');
+        legend.style.display = 'block';
+      })
+      .catch(e => mapFail('country data failed: ' + e.message));
+  }
+
+  // Layer 3: origin changes + flapping prefixes at their origin country.
+  function showEvents() {
+    if (!world) { setTimeout(showEvents, 300); return; }
+    fetch('/api/map/events?window=21600')
+      .then(r => r.json())
+      .then(d => {
+        if (activeLayer !== 'events') return;
+        clearLayers();
+        const group = L.layerGroup();
+        const used = {};   // per-country counter for jitter
+        const place = iso => {
+          const base = centroids[iso];
+          if (!base) return null;
+          const n = used[iso] = (used[iso] || 0) + 1;
+          const angle = n * 2.4, r = 0.7 * Math.sqrt(n);   // sunflower spiral
+          return [base.lat + r * Math.sin(angle), base.lng + r * Math.cos(angle)];
+        };
+        for (const e of d.origin_changes) {
+          const pos = place(e.country);
+          if (!pos) continue;
+          L.circleMarker(pos, {radius: 6, color: '#f0c249', weight: 1.5, fillOpacity: 0.5})
+            .bindPopup(`origin change · <a href="/q?query=${encodeURIComponent(e.prefix)}">${e.prefix}</a><br>` +
+                       `AS${e.old_asn} → AS${e.new_asn} · ${e.flips} flip${e.flips !== 1 ? 's' : ''}<br>${e.last_seen}`)
+            .addTo(group);
+        }
+        for (const f of d.flaps) {
+          const pos = place(f.country);
+          if (!pos) continue;
+          L.circleMarker(pos, {radius: 5, color: f.flapping ? '#ff5d6e' : '#8b98a9', weight: 1.5, fillOpacity: 0.5})
+            .bindPopup(`${f.flapping ? 'flapping' : 'churning'} · <a href="/q?query=${encodeURIComponent(f.prefix)}">${f.prefix}</a><br>` +
+                       `${f.events.toLocaleString()} events · AS${f.origin_asn || '?'}`)
+            .addTo(group);
+        }
+        layers.events = group.addTo(map);
+        const legend = $('map-legend');
+        legend.innerHTML = '<span class="sw" style="background:#f0c249"></span>origin change ' +
+          '<span class="sw" style="background:#ff5d6e"></span>flapping ' +
+          '<span class="sw" style="background:#8b98a9"></span>churning';
+        legend.style.display = 'block';
+      })
+      .catch(e => mapFail('event data failed: ' + e.message));
+  }
+
+  function startMap() { try { initMap(); } catch (e) { mapFail(e.message); } }
   if (document.readyState === 'complete' && typeof L !== 'undefined') {
     startMap();
   } else {
-    window.addEventListener('load', () => {
-      if (typeof L !== 'undefined') startMap();
-      // else the fallback loader in <head> takes over and fires one of:
-    });
+    window.addEventListener('load', () => { if (typeof L !== 'undefined') startMap(); });
     window.addEventListener('leaflet-ready', startMap);
     window.addEventListener('leaflet-failed', () =>
       mapFail('the Leaflet library failed to load from both CDNs'));
@@ -205,7 +370,7 @@
     const wdrs = d.withdrawals || [];
     state.ann += anns.length;
     state.wdr += wdrs.length;
-    flash(rrc);
+    if (activeLayer === 'collectors') flash(rrc);
     if (anns.length) addRow('ANN', rrc, anns[0], d.path);
     else if (wdrs.length) addRow('WDR', rrc, wdrs[0], null);
   }

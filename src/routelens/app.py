@@ -390,6 +390,69 @@ def create_app(config: dict | None = None) -> Flask:
             row["rank"] = rank
         return render_template("partials/address_space.html", rows=rows)
 
+    MAP_WINDOWS = {3600, 21600, 86400}
+
+    def _map_since_or_400() -> str:
+        from datetime import datetime, timedelta, timezone
+
+        try:
+            window = int(request.args.get("window", "21600"))
+        except ValueError:
+            abort(400)
+        if window not in MAP_WINDOWS:
+            abort(400)
+        return (datetime.now(timezone.utc) - timedelta(seconds=window)).strftime("%Y-%m-%dT%H:%M:%S")
+
+    @app.get("/api/map/collectors")
+    def api_map_collectors():
+        from .collectors import ACTIVE_COLLECTORS
+
+        since = _map_since_or_400()
+        activity = {row["rrc"]: row for row in store.activity_league(since=since)}
+        collectors = []
+        for c in ACTIVE_COLLECTORS:
+            row = activity.get(c["rrc"])
+            updates = row["updates"] if row else 0
+            minutes = row["minutes"] if row else 0
+            collectors.append(
+                {**c, "updates": updates, "per_minute": round(updates / minutes) if minutes else 0}
+            )
+        return jsonify({"collectors": collectors})
+
+    @app.get("/api/map/countries")
+    def api_map_countries():
+        since = _map_since_or_400()
+        countries = store.country_league(since=since, limit=250)
+        for row in countries:
+            row["intensity"] = round(row["announcements"] / row["origins"]) if row["origins"] else 0
+        return jsonify({"countries": countries})
+
+    @app.get("/api/map/events")
+    def api_map_events():
+        since = _map_since_or_400()
+        origin_changes = [
+            {
+                "prefix": e["prefix"],
+                "old_asn": e["old_asn"],
+                "new_asn": e["new_asn"],
+                "country": e["new_country"],   # locate by where the prefix went
+                "flips": e["flips"],
+                "last_seen": e["last_seen"],
+            }
+            for e in store.recent_origin_events(since=since, limit=50)
+        ]
+        flaps = [
+            {
+                "prefix": f["prefix"],
+                "origin_asn": f["origin_asn"],
+                "country": f["origin_country"],
+                "events": f["events"],
+                "flapping": bool(f["announcements"] and f["withdrawals"]),
+            }
+            for f in store.prefix_flap_league(since=since, limit=30)
+        ]
+        return jsonify({"origin_changes": origin_changes, "flaps": flaps})
+
     def _valid_asn_or_400() -> int:
         raw = request.args.get("asn", "")
         if not raw.isdigit() or not (0 < int(raw) <= 4_294_967_295):

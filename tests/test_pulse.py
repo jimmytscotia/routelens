@@ -42,3 +42,22 @@ def test_collector_table_has_no_duplicate_ids():
     ids = [c["rrc"] for c in ACTIVE_COLLECTORS]
 
     assert len(ids) == len(set(ids))
+
+
+def test_pulse_map_has_layer_controls_and_data_sources(tmp_path):
+    client = _app(tmp_path).test_client()
+
+    body = client.get("/").data.decode()
+
+    # Layer switcher pills for the three activity views + UK preset.
+    for layer in ("collectors", "churn", "events"):
+        assert f'data-layer="{layer}"' in body, layer
+    assert 'id="uk-btn"' in body
+    # The map is fed by the vendored boundaries and the map APIs.
+    assert "/static/world.geojson" in body
+    assert "/api/map/collectors" in body
+    assert "/api/map/countries" in body
+    assert "/api/map/events" in body
+    # Choropleth legend and the allocation caveat are present.
+    assert 'id="map-legend"' in body
+    assert "registration" in body
