@@ -413,3 +413,69 @@ def test_table_growth_fetches_both_families_and_caches(store, monkeypatch):
     again = client.table_growth(now_ts=1784048471)
     assert again["ok"] is True
     assert len(calls) == 2  # served from cache
+
+
+def test_ripestat_announced_prefixes_summarises_and_caches(store, monkeypatch):
+    payload = {"data": {"prefixes": [{"prefix": "5.80.0.0/15"}, {"prefix": "2a00:2380::/25"}]}}
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        return FakeResponse(payload)
+
+    monkeypatch.setattr(sources.requests, "get", fake_get)
+    client = SourceClient(store)
+
+    result = client.ripestat_announced_prefixes(2856)
+
+    assert result["ok"] is True
+    assert result["data"]["count"] == 2
+    assert "5.80.0.0/15" in result["data"]["prefixes"]
+
+    client.ripestat_announced_prefixes(2856)
+    assert len(calls) == 1
+
+
+def test_routeviews_rpki_asn_client_summarises(store, monkeypatch):
+    payload = {"2856": {"prefix": [{"5.80.0.0/15": "valid"}, {"192.0.2.0/24": "notfound"}]}}
+    monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse(payload))
+    client = SourceClient(store)
+
+    result = client.routeviews_rpki_asn(2856)
+
+    assert result["ok"] is True
+    assert result["data"] == {"total": 2, "valid": 1, "invalid": 0, "notfound": 1}
+
+
+def test_peeringdb_net_summarises(store, monkeypatch):
+    payload = {
+        "data": [
+            {
+                "name": "BT",
+                "aka": "British Telecom",
+                "website": "https://www.bt.com",
+                "info_traffic": "1-5Tbps",
+                "info_type": "NSP",
+                "netixlan_set": [{"ix_id": 18}, {"ix_id": 31}, {"ix_id": 18}],
+            }
+        ]
+    }
+    monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse(payload))
+    client = SourceClient(store)
+
+    result = client.peeringdb_net(2856)
+
+    assert result["ok"] is True
+    assert result["data"]["name"] == "BT"
+    assert result["data"]["traffic"] == "1-5Tbps"
+    assert result["data"]["ix_count"] == 3
+
+
+def test_peeringdb_net_absent_network(store, monkeypatch):
+    monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse({"data": []}))
+    client = SourceClient(store)
+
+    result = client.peeringdb_net(64500)
+
+    assert result["ok"] is True
+    assert result["data"] is None

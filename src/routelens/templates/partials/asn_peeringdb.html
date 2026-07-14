@@ -1,0 +1,15 @@
+<header class="phead"><h2>Peering presence</h2><span class="srctag">peeringdb.com</span></header>
+{% if result.ok %}
+{% if result.data %}
+{% set d = result.data %}
+<div class="kv"><span>PeeringDB name</span><strong>{{ d.name }}{% if d.aka %} ({{ d.aka }}){% endif %}</strong></div>
+{% if d.type %}<div class="kv"><span>Network type</span><strong>{{ d.type }}</strong></div>{% endif %}
+{% if d.traffic %}<div class="kv"><span>Self-reported traffic</span><strong>{{ d.traffic }}</strong></div>{% endif %}
+<div class="kv"><span title="Internet exchange ports registered in PeeringDB">IX presence</span><strong>{{ d.ix_count }} exchange port{{ 's' if d.ix_count != 1 }}</strong></div>
+{% if d.website %}<div class="kv"><span>Website</span><strong><a href="{{ d.website }}" rel="noopener">{{ d.website }}</a></strong></div>{% endif %}
+{% else %}
+<div class="empty"><strong>Not in PeeringDB.</strong><p>Smaller or non-peering networks often aren't registered.</p></div>
+{% endif %}
+{% else %}
+<div class="empty"><strong>PeeringDB unavailable.</strong><p>{{ result.error }}</p></div>
+{% endif %}

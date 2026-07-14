@@ -438,3 +438,22 @@ def test_country_league_partial_empty_and_bad_window(tmp_path):
     assert "aggregator" in empty.data.decode().lower()
 
     assert client.get("/partials/dashboards/countries?window=2").status_code == 400
+
+
+def test_asn_profiles_index_lists_uk_operators_and_churners(tmp_path):
+    app = _app(tmp_path)
+    store = app.config["ROUTELENS_STORE"]
+    store.upsert_asn_names([(2856, "British Telecommunications PLC", "GB"), (15169, "Google LLC", "US")])
+    store.record_asn_bucket(bucket_ts=_hour_bucket(0), asn=15169, updates=900, announcements=950)
+    client = app.test_client()
+
+    response = client.get("/dashboards/asn-profiles")
+    body = response.data.decode()
+
+    assert response.status_code == 200
+    assert "ASN profiles" in body
+    # UK operators listed with names, linking into the profile view.
+    assert "/q?query=AS2856" in body
+    assert "British Telecommunications PLC" in body
+    # Current churners offered as examples too.
+    assert "/q?query=AS15169" in body

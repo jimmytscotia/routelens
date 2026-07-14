@@ -1,0 +1,47 @@
+{% extends "dashboards/_layout.html" %}
+{% block title %}ASN profiles · RouteLens{% endblock %}
+{% block dashboard %}
+  <div class="pagehead" style="padding-top:0">
+    <h1>ASN profiles</h1>
+    <p>Everything RouteLens can tell you about one operator on a single page: live churn and
+       transit role from the aggregator, announced prefixes and RPKI posture from the collectors,
+       peering presence from PeeringDB. Query any ASN from the search box, or start from a list below.</p>
+  </div>
+  <div class="panelgrid">
+    <section class="panel">
+      <header class="phead"><h2>UK operators</h2><span class="srctag">curated</span></header>
+      <div class="tablewrap">
+      <table class="datatable">
+        <tbody>
+        {% for op in uk %}
+          <tr>
+            <td class="mono"><a href="/q?query=AS{{ op.asn }}">AS{{ op.asn }}</a></td>
+            <td>{{ op.name or '—' }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <section class="panel">
+      <header class="phead"><h2>Currently noisiest origins</h2><span class="srctag">churn league · 24h</span></header>
+      {% if churners %}
+      <div class="tablewrap">
+      <table class="datatable">
+        <tbody>
+        {% for row in churners %}
+          <tr>
+            <td class="mono"><a href="/q?query=AS{{ row.asn }}">AS{{ row.asn }}</a></td>
+            <td>{{ row.name or '—' }}</td>
+            <td class="num mono">{{ "{:,}".format(row.announcements) }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <div class="empty"><strong>No churn data yet.</strong><p>The aggregator's first hour is still filling.</p></div>
+      {% endif %}
+    </section>
+  </div>
+{% endblock %}

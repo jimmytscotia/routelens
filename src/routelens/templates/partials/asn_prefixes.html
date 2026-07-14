@@ -1,0 +1,20 @@
+<header class="phead"><h2>Announced prefixes{% if result.ok %} · {{ "{:,}".format(result.data.count) }}{% endif %}</h2><span class="srctag">stat.ripe.net</span></header>
+{% if result.ok %}
+{% if result.data.prefixes %}
+<div class="prefixcloud">
+  {% for prefix in result.data.prefixes %}
+  <a class="mono" href="/q?query={{ prefix|urlencode }}">{{ prefix }}</a>
+  {% endfor %}
+</div>
+{% if result.data.count > result.data.prefixes|length %}
+<p class="attribution">Showing the first {{ result.data.prefixes|length }} of {{ "{:,}".format(result.data.count) }} prefixes.</p>
+{% endif %}
+<style>
+  .prefixcloud{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:.75rem;max-height:260px;overflow-y:auto}
+</style>
+{% else %}
+<div class="empty"><strong>No announced prefixes seen.</strong><p>RIS peers don't currently see this AS originating any routes.</p></div>
+{% endif %}
+{% else %}
+<div class="empty"><strong>Prefix list unavailable.</strong><p>{{ result.error }}</p></div>
+{% endif %}

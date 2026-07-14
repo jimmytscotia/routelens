@@ -28,6 +28,7 @@
     <h1 class="mono">{{ raw }}</h1>
     <p>
       {{ kind }}
+      {% if kind == 'asn' and asn_name %} · {{ asn_name }}{% if asn_country %} ({{ asn_country }}){% endif %}{% endif %}
       {% if kind == 'hostname' and resolved_ips %} · resolves to <span class="mono">{{ resolved_ips|join(', ') }}</span>{% endif %}
       {% if prefix and kind != 'prefix' %} · covering prefix <a class="mono" href="/q?query={{ prefix|urlencode }}">{{ prefix }}</a>{% endif %}
       {% if asns %} · origin {% for a in asns %}<span class="mono">AS{{ a }}</span> {% endfor %}{% endif %}
@@ -68,10 +69,19 @@
     <p class="attribution" id="live-quiet">Quiet is healthy — a stable prefix only generates updates when routing actually changes.</p>
   </section>
   {% elif kind == 'asn' %}
-  <section class="panel">
-    <header class="phead"><h2 class="mono">AS{{ value }}</h2><span class="srctag">coming soon</span></header>
-    <div class="empty"><strong>ASN detail view is coming in phase 2.</strong>
-      <p>Query one of this network's prefixes directly in the meantime.</p></div>
+  <div class="panelgrid">
+    <section class="panel" hx-get="/partials/asn/summary?asn={{ value }}" hx-trigger="load" hx-swap="innerHTML">
+      <header class="phead"><h2>Observed activity</h2><span class="srctag">routelens aggregator</span></header><p class="loading">Loading…</p>
+    </section>
+    <section class="panel" hx-get="/partials/asn/rpki?asn={{ value }}" hx-trigger="load" hx-swap="innerHTML">
+      <header class="phead"><h2>RPKI posture</h2><span class="srctag">api.routeviews.org</span></header><p class="loading">Loading…</p>
+    </section>
+    <section class="panel" hx-get="/partials/asn/peeringdb?asn={{ value }}" hx-trigger="load" hx-swap="innerHTML">
+      <header class="phead"><h2>Peering presence</h2><span class="srctag">peeringdb.com</span></header><p class="loading">Loading…</p>
+    </section>
+  </div>
+  <section class="panel" hx-get="/partials/asn/prefixes?asn={{ value }}" hx-trigger="load" hx-swap="innerHTML">
+    <header class="phead"><h2>Announced prefixes</h2><span class="srctag">stat.ripe.net</span></header><p class="loading">Loading…</p>
   </section>
   {% endif %}
 {% endif %}

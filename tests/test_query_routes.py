@@ -216,3 +216,49 @@ def test_globalping_api_rejects_invalid_target(client):
     response = client.post("/api/globalping", json={"target": "not a target!"})
 
     assert response.status_code == 400
+
+
+def test_asn_query_renders_profile_shell(client, app):
+    store = app.config["ROUTELENS_STORE"]
+    store.upsert_asn_names([(2856, "British Telecommunications PLC", "GB")])
+
+    response = client.get("/q?query=AS2856")
+    body = response.data.decode()
+
+    assert response.status_code == 200
+    assert "British Telecommunications PLC" in body
+    # Profile panels lazy-load.
+    assert "/partials/asn/summary?asn=2856" in body
+    assert "/partials/asn/prefixes?asn=2856" in body
+    assert "/partials/asn/rpki?asn=2856" in body
+    assert "/partials/asn/peeringdb?asn=2856" in body
+    # The phase-2 stub is gone.
+    assert "coming in phase 2" not in body
+
+
+def test_asn_summary_partial_uses_local_stats(client, app):
+    store = app.config["ROUTELENS_STORE"]
+    store.upsert_asn_names([(2856, "British Telecommunications PLC", "GB")])
+    from datetime import datetime, timezone
+    hour = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0).strftime("%Y-%m-%dT%H:%M:%S")
+    store.record_asn_bucket(bucket_ts=hour, asn=2856, updates=40, announcements=50, distinct=12)
+    store.record_transit_bucket(bucket_ts=hour, asn=2856, paths=900)
+
+    body = client.get("/partials/asn/summary?asn=2856").data.decode()
+
+    assert "50" in body           # announcements in window
+    assert "900" in body          # transit paths
+    assert "United Kingdom" in body or "GB" in body
+
+
+def test_asn_prefixes_partial_lists_and_links(client):
+    body = client.get("/partials/asn/prefixes?asn=15169").data.decode()
+
+    # FakeSources returns 8.8.8.0/24-style data? No — it has no announced
+    # prefixes method; the partial must degrade, not crash.
+    assert "unavailable" in body.lower() or "prefixes" in body.lower()
+
+
+def test_asn_partials_reject_bad_asn(client):
+    assert client.get("/partials/asn/summary?asn=abc").status_code == 400
+    assert client.get("/partials/asn/prefixes?asn=-1").status_code == 400

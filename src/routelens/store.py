@@ -561,6 +561,40 @@ class RouteLensStore:
             cur = conn.execute("DELETE FROM ris_path_stats WHERE bucket_ts < ?", (before,))
             return cur.rowcount
 
+    def asn_profile_stats(self, *, asn: int, since: str) -> dict[str, Any]:
+        """Everything RouteLens already knows locally about one ASN."""
+        with self.connect() as conn:
+            name_row = conn.execute("SELECT name, country FROM asn_names WHERE asn = ?", (asn,)).fetchone()
+            activity = conn.execute(
+                """
+                SELECT COALESCE(SUM(updates),0) AS updates,
+                       COALESCE(SUM(announcements),0) AS announcements,
+                       COALESCE(MAX(distinct_prefixes),0) AS peak_distinct
+                  FROM ris_asn_activity WHERE asn = ? AND bucket_ts >= ?
+                """,
+                (asn, since),
+            ).fetchone()
+            series = conn.execute(
+                "SELECT bucket_ts, announcements FROM ris_asn_activity WHERE asn = ? AND bucket_ts >= ? ORDER BY bucket_ts",
+                (asn, since),
+            ).fetchall()
+            transit = conn.execute(
+                "SELECT COALESCE(SUM(paths),0) AS paths FROM ris_transit_activity WHERE asn = ? AND bucket_ts >= ?",
+                (asn, since),
+            ).fetchone()
+            rpki_row = conn.execute("SELECT * FROM rpki_scores WHERE asn = ?", (asn,)).fetchone()
+        return {
+            "asn": asn,
+            "name": name_row["name"] if name_row else "",
+            "country": name_row["country"] if name_row else "",
+            "updates": activity["updates"],
+            "announcements": activity["announcements"],
+            "peak_distinct": activity["peak_distinct"],
+            "churn_series": [(row["bucket_ts"], row["announcements"]) for row in series],
+            "transit_paths": transit["paths"],
+            "rpki": dict(rpki_row) if rpki_row else None,
+        }
+
     def upsert_rpki_score(self, *, asn: int, total: int, valid: int, invalid: int, notfound: int) -> None:
         with self.connect() as conn:
             conn.execute(

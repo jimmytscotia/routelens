@@ -1,0 +1,17 @@
+<header class="phead"><h2>Observed activity · last 24h</h2><span class="srctag">routelens aggregator</span></header>
+{% if p.name %}<div class="kv"><span>Operator</span><strong>{{ p.name }}</strong></div>{% endif %}
+{% if p.country %}<div class="kv"><span>Registered</span><strong>{{ p.country_name }} ({{ p.country }})</strong></div>{% endif %}
+<div class="kv"><span title="Prefix announcements originated by this AS, seen across all RIS collectors">Announcements</span><strong>{{ "{:,}".format(p.announcements) }}</strong></div>
+<div class="kv"><span title="Most distinct prefixes touched in a single hour">Peak distinct prefixes</span><strong>{{ "{:,}".format(p.peak_distinct) }}</strong></div>
+<div class="kv"><span title="Announcement paths in which this AS appeared as a transit hop">Transit paths carried</span><strong>{{ "{:,}".format(p.transit_paths) }}</strong></div>
+{% if p.rpki %}
+<div class="kv"><span>RPKI (scored {{ p.rpki.checked_at[:16] }})</span>
+  <strong><span class="badge {{ 'healthy' if p.rpki.total and p.rpki.valid / p.rpki.total >= 0.95 else 'warning' }}">{{ (100 * p.rpki.valid / p.rpki.total)|round|int if p.rpki.total else 0 }}% signed</span></strong></div>
+{% endif %}
+{% if p.spark %}
+<div class="kv"><span>Churn by hour</span>
+  <strong><svg width="120" height="24" aria-label="Hourly announcement counts"><polyline points="{{ p.spark }}" style="stroke:var(--accent);stroke-width:1.5;fill:none"/></svg></strong></div>
+{% endif %}
+{% if not p.announcements and not p.transit_paths %}
+<p class="attribution">Quiet in the aggregator's window — normal for small or stable networks.</p>
+{% endif %}

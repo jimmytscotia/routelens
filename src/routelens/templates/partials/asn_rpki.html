@@ -1,0 +1,12 @@
+<header class="phead"><h2>RPKI posture</h2><span class="srctag">api.routeviews.org</span></header>
+{% if result.ok %}
+{% set d = result.data %}
+{% set coverage = (100 * d.valid / d.total)|round|int if d.total else 0 %}
+<div class="kv"><span>Originated prefixes</span><strong>{{ "{:,}".format(d.total) }}</strong></div>
+<div class="kv"><span>ROA coverage</span>
+  <strong><span class="badge {{ 'healthy' if coverage >= 95 else ('warning' if coverage >= 50 else 'critical') }}">{{ coverage }}% signed</span></strong></div>
+{% if d.invalid %}<div class="kv"><span>RPKI invalid</span><strong><span class="badge critical" title="Announcing prefixes that conflict with published ROAs">{{ d.invalid }}</span></strong></div>{% endif %}
+<div class="kv"><span>No ROA</span><strong>{{ "{:,}".format(d.notfound) }}</strong></div>
+{% else %}
+<div class="empty"><strong>RPKI data unavailable.</strong><p>{{ result.error }}</p></div>
+{% endif %}

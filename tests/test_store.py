@@ -324,3 +324,40 @@ def test_country_league_rolls_up_asn_activity(tmp_path):
     assert league[0]["origins"] == 2
     assert league[1]["announcements"] == 60
     assert league[1]["origins"] == 1
+
+
+def test_asn_profile_stats_assembles_local_knowledge(tmp_path):
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "profile.db")
+    store.init_schema()
+    store.upsert_asn_names([(2856, "British Telecommunications PLC", "GB")])
+    store.record_asn_bucket(bucket_ts="2026-07-14T13:00:00", asn=2856, updates=40, announcements=50, distinct=12)
+    store.record_asn_bucket(bucket_ts="2026-07-14T14:00:00", asn=2856, updates=10, announcements=15, distinct=6)
+    store.record_transit_bucket(bucket_ts="2026-07-14T13:00:00", asn=2856, paths=900)
+    store.upsert_rpki_score(asn=2856, total=100, valid=97, invalid=0, notfound=3)
+
+    profile = store.asn_profile_stats(asn=2856, since="2026-07-14T12:00:00")
+
+    assert profile["name"] == "British Telecommunications PLC"
+    assert profile["country"] == "GB"
+    assert profile["announcements"] == 65
+    assert profile["peak_distinct"] == 12
+    assert profile["transit_paths"] == 900
+    assert profile["rpki"]["valid"] == 97
+    assert profile["churn_series"] == [("2026-07-14T13:00:00", 50), ("2026-07-14T14:00:00", 15)]
+
+
+def test_asn_profile_stats_unknown_asn(tmp_path):
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "profile.db")
+    store.init_schema()
+
+    profile = store.asn_profile_stats(asn=64500, since="2026-07-14T12:00:00")
+
+    assert profile["name"] == ""
+    assert profile["announcements"] == 0
+    assert profile["transit_paths"] == 0
+    assert profile["rpki"] is None
+    assert profile["churn_series"] == []

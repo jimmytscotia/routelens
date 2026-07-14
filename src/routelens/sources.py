@@ -11,6 +11,7 @@ from .store import RouteLensStore
 RIPESTAT_BASE = "https://stat.ripe.net/data"
 ROUTEVIEWS_BASE = "https://api.routeviews.org/guest"
 NLNOG_BASE = "https://lg.ring.nlnog.net/api"
+PEERINGDB_BASE = "https://www.peeringdb.com/api"
 GLOBALPING_BASE = "https://api.globalping.io/v1"
 RADAR_BASE = "https://api.cloudflare.com/client/v4/radar"
 
@@ -211,6 +212,54 @@ class SourceClient:
             cache_key=f"ripestat:netinfo:{ip}",
             summarize=summarize,
             max_age=600,
+        )
+
+    def ripestat_announced_prefixes(self, asn: int) -> dict[str, Any]:
+        def summarize(payload: dict) -> dict[str, Any]:
+            prefixes = [
+                p.get("prefix") for p in (payload.get("data", payload).get("prefixes") or [])
+                if p.get("prefix")
+            ]
+            return {"count": len(prefixes), "prefixes": prefixes[:500]}
+
+        return self._ripestat(
+            "announced-prefixes",
+            {"resource": asn},
+            cache_key=f"ripestat:announced:{asn}",
+            summarize=summarize,
+            max_age=3600,
+        )
+
+    def routeviews_rpki_asn(self, asn: int) -> dict[str, Any]:
+        return self._cached_get(
+            f"routeviews:rpki:{asn}",
+            f"{ROUTEVIEWS_BASE}/rpki?asn={asn}",
+            max_age_seconds=3600,
+            summarize=lambda payload: summarize_rpki_asn(payload, asn),
+        )
+
+    def peeringdb_net(self, asn: int) -> dict[str, Any]:
+        def summarize(payload: dict) -> dict[str, Any] | None:
+            nets = payload.get("data") or []
+            if not nets:
+                return None
+            net = nets[0]
+            ix = net.get("netixlan_set") or []
+            return {
+                "name": net.get("name"),
+                "aka": net.get("aka"),
+                "website": net.get("website"),
+                "traffic": net.get("info_traffic"),
+                "type": net.get("info_type"),
+                "ix_count": len(ix),
+            }
+
+        return self._cached_get(
+            f"peeringdb:net:{asn}",
+            f"{PEERINGDB_BASE}/net",
+            params={"asn": asn, "depth": 2},
+            max_age_seconds=86400,
+            summarize=summarize,
         )
 
     # ---- RouteViews -----------------------------------------------------

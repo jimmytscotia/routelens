@@ -101,6 +101,11 @@ def create_app(config: dict | None = None) -> Flask:
         if result["kind"] == "invalid":
             return render_template("query.html", **context)
 
+        if result["kind"] == "asn":
+            with_names = store.asn_profile_stats(asn=result["value"], since="1970-01-01T00:00:00")
+            context["asn_name"] = with_names["name"]
+            context["asn_country"] = with_names["country"]
+
         if result["kind"] == "hostname":
             ips = app.config["RESOLVER"](result["value"])
             context["resolved_ips"] = ips
@@ -373,6 +378,64 @@ def create_app(config: dict | None = None) -> Flask:
                 "v6": _line_chart(result["data"]["v6"]),
             }
         return render_template("partials/table_growth.html", result=result, charts=charts)
+
+    def _valid_asn_or_400() -> int:
+        raw = request.args.get("asn", "")
+        if not raw.isdigit() or not (0 < int(raw) <= 4_294_967_295):
+            abort(400)
+        return int(raw)
+
+    def _safe(call):
+        """Partials must degrade to a labelled gap, never 500."""
+        try:
+            return call()
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @app.get("/dashboards/asn-profiles")
+    def dashboard_asn_profiles():
+        from datetime import datetime, timedelta, timezone
+
+        from .uk import UK_OPERATORS
+
+        day_ago = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S")
+        churners = store.asn_league(since=day_ago, limit=10)
+        uk = []
+        for asn in UK_OPERATORS:
+            profile = store.asn_profile_stats(asn=asn, since=day_ago)
+            uk.append({"asn": asn, "name": profile["name"]})
+        return render_template("dashboards/asn_profiles.html", uk=uk, churners=churners)
+
+    @app.get("/partials/asn/summary")
+    def partial_asn_summary():
+        from datetime import datetime, timedelta, timezone
+
+        from .countries import country_name
+
+        asn = _valid_asn_or_400()
+        day_ago = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S")
+        profile = store.asn_profile_stats(asn=asn, since=day_ago)
+        profile["country_name"] = country_name(profile["country"]) if profile["country"] else ""
+        profile["spark"] = _sparkline_points([v for _, v in profile["churn_series"]])
+        return render_template("partials/asn_summary.html", p=profile)
+
+    @app.get("/partials/asn/prefixes")
+    def partial_asn_prefixes():
+        asn = _valid_asn_or_400()
+        result = _safe(lambda: sources().ripestat_announced_prefixes(asn))
+        return render_template("partials/asn_prefixes.html", result=result, asn=asn)
+
+    @app.get("/partials/asn/rpki")
+    def partial_asn_rpki():
+        asn = _valid_asn_or_400()
+        result = _safe(lambda: sources().routeviews_rpki_asn(asn))
+        return render_template("partials/asn_rpki.html", result=result, asn=asn)
+
+    @app.get("/partials/asn/peeringdb")
+    def partial_asn_peeringdb():
+        asn = _valid_asn_or_400()
+        result = _safe(lambda: sources().peeringdb_net(asn))
+        return render_template("partials/asn_peeringdb.html", result=result, asn=asn)
 
     @app.post("/api/globalping")
     def api_globalping_create():
