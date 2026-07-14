@@ -67,6 +67,15 @@ CREATE TABLE IF NOT EXISTS asn_names (
   country TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS rpki_scores (
+  asn INTEGER PRIMARY KEY,
+  total INTEGER NOT NULL,
+  valid INTEGER NOT NULL,
+  invalid INTEGER NOT NULL,
+  notfound INTEGER NOT NULL,
+  checked_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS ris_origin_events (
   hour_bucket TEXT NOT NULL,         -- dedupe window
   prefix TEXT NOT NULL,
@@ -457,6 +466,31 @@ class RouteLensStore:
                  LIMIT ?
                 """,
                 (since, limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def upsert_rpki_score(self, *, asn: int, total: int, valid: int, invalid: int, notfound: int) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO rpki_scores(asn, total, valid, invalid, notfound, checked_at)
+                VALUES (?, ?, ?, ?, ?, datetime('now'))
+                ON CONFLICT(asn) DO UPDATE
+                   SET total = excluded.total, valid = excluded.valid,
+                       invalid = excluded.invalid, notfound = excluded.notfound,
+                       checked_at = excluded.checked_at
+                """,
+                (asn, total, valid, invalid, notfound),
+            )
+
+    def list_rpki_scores(self) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT s.*, COALESCE(n.name, '') AS name, COALESCE(n.country, '') AS country
+                  FROM rpki_scores s
+                  LEFT JOIN asn_names n ON n.asn = s.asn
+                """
             ).fetchall()
         return [dict(row) for row in rows]
 

@@ -1,0 +1,51 @@
+{% if rows %}
+<div class="tablewrap">
+<table class="datatable">
+  <thead>
+    <tr>
+      <th class="num" title="Rank by ROA coverage percentage">#</th>
+      <th title="The operator's autonomous system. Click to open in the looking glass.">Origin AS</th>
+      <th title="Operator name and registration country from bgp.tools">Operator</th>
+      <th title="Why this ASN is on the board: curated UK operator, or currently among the top-10 noisiest origins in the churn league">Set</th>
+      <th class="num" title="Prefixes this AS originates, as seen by RouteViews">Prefixes</th>
+      <th title="Share of originated prefixes covered by a valid ROA — the operator has cryptographically signed who may announce them">ROA coverage</th>
+      <th class="num" title="Prefixes announced in CONFLICT with a ROA — either a misconfiguration or something announcing routes it shouldn't">Invalid</th>
+      <th class="num" title="Prefixes with no covering ROA at all — unsigned address space">No ROA</th>
+      <th title="signed = 95%+ coverage. partial = 50-94%. poor = below 50%. Any invalid routes are flagged regardless.">Verdict</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for row in rows %}
+    <tr{% if row.country == 'GB' %} class="uk-row"{% endif %}>
+      <td class="num mono">{{ row.rank }}</td>
+      <td class="mono"><a href="/q?query=AS{{ row.asn }}">AS{{ row.asn }}</a>{% if row.country == 'GB' %}<span class="uk-tag">UK</span>{% endif %}</td>
+      <td>{{ row.name or '—' }}</td>
+      <td class="mono">{{ 'UK operators' if row.is_uk_set else 'top churners' }}</td>
+      <td class="num mono">{{ "{:,}".format(row.total) }}</td>
+      <td>
+        <span class="covbar {{ 'low' if row.coverage < 50 else ('mid' if row.coverage < 95 else '') }}"
+              aria-hidden="true"><i style="width:{{ row.coverage }}%"></i></span>
+        <span class="mono">{{ row.coverage }}%</span>
+      </td>
+      <td class="num mono">{% if row.invalid %}<span class="badge critical" title="This operator is announcing prefixes that conflict with published ROAs — worth investigating in the looking glass.">{{ row.invalid }} invalid</span>{% else %}0{% endif %}</td>
+      <td class="num mono">{{ "{:,}".format(row.notfound) }}</td>
+      <td>
+        {% if row.coverage >= 95 %}<span class="badge healthy" title="95%+ of originated prefixes have valid ROAs — this operator has signed its estate.">signed</span>
+        {% elif row.coverage >= 50 %}<span class="badge warning" title="Between 50% and 94% of originated prefixes are covered — signing in progress or partially maintained.">partial</span>
+        {% else %}<span class="badge critical" title="Under half of this operator's prefixes have ROAs — largely unsigned address space.">poor</span>{% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="attribution">Coverage counts originated prefixes seen by RouteViews with a valid ROA. Checked hourly,
+   {{ rows[0].checked_at }} UTC last. Signing ≠ validating: dropping other people's invalid routes is a
+   separate behaviour this board cannot measure.</p>
+{% else %}
+<div class="empty">
+  <strong>No RPKI scores yet.</strong>
+  <p>The aggregator scores operators hourly against RouteViews. If it was just started,
+     the first pass (paced at ~1 request/second) takes a minute or two.</p>
+</div>
+{% endif %}

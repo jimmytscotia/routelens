@@ -1,0 +1,37 @@
+{% extends "dashboards/_layout.html" %}
+{% block title %}RPKI scoreboard · RouteLens{% endblock %}
+{% block dashboard %}
+  <div class="pagehead" style="padding-top:0">
+    <h1>RPKI scoreboard</h1>
+    <p>Who has signed their routes: ROA coverage of each operator's originated prefixes,
+       for the major UK networks plus the currently noisiest origins from the churn league.
+       Signing is measurable from route collectors; whether an operator also <em>validates</em>
+       and drops invalid routes is a separate property this table can't see.</p>
+  </div>
+  <section class="panel" hx-get="/partials/dashboards/rpki-global" hx-trigger="load" hx-swap="innerHTML">
+    <header class="phead"><h2>Global routing table</h2><span class="srctag">Cloudflare Radar</span></header>
+    <p class="loading">Loading…</p>
+  </section>
+  <section class="panel">
+    <header class="phead">
+      <h2>Operator ROA coverage</h2>
+      <span class="srctag">api.routeviews.org · refreshed hourly</span>
+    </header>
+    <div id="rpkiboard"
+         hx-get="/partials/dashboards/rpki"
+         hx-trigger="load, every 120s"
+         hx-swap="innerHTML">
+      <p class="loading">Loading…</p>
+    </div>
+  </section>
+<style>
+  .uk-row td{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+  .uk-tag{font-size:.5625rem;font-family:var(--mono);color:var(--accent-ink);
+    border:1px solid var(--line-strong);border-radius:999px;padding:1px 6px;margin-left:6px;vertical-align:middle}
+  .covbar{display:inline-block;width:120px;height:8px;background:var(--inset);
+    border:1px solid var(--line);border-radius:999px;overflow:hidden;vertical-align:middle;margin-right:8px}
+  .covbar i{display:block;height:100%;background:var(--ok)}
+  .covbar.mid i{background:var(--warn)}
+  .covbar.low i{background:var(--crit)}
+</style>
+{% endblock %}

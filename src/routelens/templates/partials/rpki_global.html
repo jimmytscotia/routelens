@@ -1,0 +1,15 @@
+<header class="phead"><h2>Global routing table</h2><span class="srctag">Cloudflare Radar</span></header>
+{% if result.ok %}
+{% set d = result.data %}
+{% set total = d.routes_total or 0 %}
+<div class="kv"><span>Routes in the global table</span><strong>{{ "{:,}".format(total) }}</strong></div>
+<div class="kv"><span>RPKI valid</span><strong>{{ "{:,}".format(d.routes_valid or 0) }} ({{ (100 * (d.routes_valid or 0) / total)|round(1) if total else 0 }}%)</strong></div>
+<div class="kv"><span>RPKI invalid</span><strong>{{ "{:,}".format(d.routes_invalid or 0) }}</strong></div>
+<div class="kv"><span>No ROA</span><strong>{{ "{:,}".format(d.routes_unknown or 0) }}</strong></div>
+<p class="attribution">Data: Cloudflare Radar (CC BY-NC 4.0), cached hourly</p>
+{% elif result.unconfigured %}
+<div class="empty"><strong>Global stats need a Cloudflare Radar token.</strong>
+  <p>Set <code>CLOUDFLARE_RADAR_TOKEN</code> to show worldwide RPKI adoption alongside the operator board.</p></div>
+{% else %}
+<div class="empty"><strong>Cloudflare Radar unavailable.</strong><p>{{ result.error }}</p></div>
+{% endif %}

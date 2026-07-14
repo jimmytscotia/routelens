@@ -263,6 +263,27 @@ def create_app(config: dict | None = None) -> Flask:
             "partials/origin_events.html", events=events, window_label=ORIGIN_WINDOWS[window]
         )
 
+    @app.get("/dashboards/rpki")
+    def dashboard_rpki():
+        return render_template("dashboards/rpki.html")
+
+    @app.get("/partials/dashboards/rpki")
+    def partial_dashboard_rpki():
+        from .uk import UK_OPERATORS
+
+        rows = store.list_rpki_scores()
+        for row in rows:
+            row["coverage"] = round(100 * row["valid"] / row["total"]) if row["total"] else 0
+            row["is_uk_set"] = row["asn"] in UK_OPERATORS
+        rows.sort(key=lambda r: (-r["coverage"], -r["total"]))
+        for rank, row in enumerate(rows, start=1):
+            row["rank"] = rank
+        return render_template("partials/rpki_scoreboard.html", rows=rows)
+
+    @app.get("/partials/dashboards/rpki-global")
+    def partial_dashboard_rpki_global():
+        return render_template("partials/rpki_global.html", result=sources().radar_route_stats())
+
     @app.post("/api/globalping")
     def api_globalping_create():
         payload = request.get_json(silent=True) or {}

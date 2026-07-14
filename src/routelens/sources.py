@@ -35,6 +35,49 @@ def parse_asn_csv(text: str) -> list[tuple[int, str, str]]:
     return rows
 
 
+def summarize_rpki_asn(payload: dict, asn: int) -> dict[str, int]:
+    """Count validity states in a RouteViews /guest/rpki?asn= response.
+    States other than valid/invalid (notfound, unknown) mean no covering ROA."""
+    entry = payload.get(str(asn)) or {}
+    counts = {"total": 0, "valid": 0, "invalid": 0, "notfound": 0}
+    for item in entry.get("prefix") or []:
+        for state in item.values():
+            counts["total"] += 1
+            if state == "valid":
+                counts["valid"] += 1
+            elif state == "invalid":
+                counts["invalid"] += 1
+            else:
+                counts["notfound"] += 1
+    return counts
+
+
+def refresh_rpki_scores(store: RouteLensStore, asns: list[int], *, pace_s: float = 1.5, timeout: int = 30) -> int:
+    """Score each ASN's ROA coverage via RouteViews, paced for the guest tier
+    (1 req/s). Skips ASNs whose fetch fails; returns how many were scored."""
+    import time as _time
+
+    scored = 0
+    for asn in asns:
+        try:
+            response = requests.get(
+                f"{ROUTEVIEWS_BASE}/rpki?asn={asn}",
+                headers={"User-Agent": USER_AGENT},
+                timeout=timeout,
+            )
+            response.raise_for_status()
+            counts = summarize_rpki_asn(response.json(), asn)
+        except Exception:
+            continue
+        finally:
+            if pace_s:
+                _time.sleep(pace_s)
+        if counts["total"]:
+            store.upsert_rpki_score(asn=asn, **counts)
+            scored += 1
+    return scored
+
+
 def refresh_asn_names(store: RouteLensStore, timeout: int = 60) -> int:
     """Fetch the bgp.tools ASN name table and upsert it. Returns rows written.
     bgp.tools asks for a descriptive User-Agent and at most daily fetches."""
@@ -261,6 +304,19 @@ class SourceClient:
         return {"ok": True, "data": {"status": payload.get("status"), "probes": probes}}
 
     # ---- Cloudflare Radar -------------------------------------------------
+
+    def radar_route_stats(self) -> dict[str, Any]:
+        """Global routing-table RPKI stats from Cloudflare Radar."""
+        token = os.environ.get("CLOUDFLARE_RADAR_TOKEN")
+        if not token:
+            return {"ok": False, "unconfigured": True, "error": "CLOUDFLARE_RADAR_TOKEN not set"}
+        return self._cached_get(
+            "radar:route-stats",
+            f"{RADAR_BASE}/bgp/routes/stats",
+            headers={"Authorization": f"Bearer {token}"},
+            max_age_seconds=3600,
+            summarize=lambda payload: (payload.get("result") or {}).get("stats") or {},
+        )
 
     def radar_events(self, kind: str = "hijacks") -> dict[str, Any]:
         token = os.environ.get("CLOUDFLARE_RADAR_TOKEN")

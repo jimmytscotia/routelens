@@ -256,3 +256,25 @@ def test_prune_origin_events(tmp_path):
     store.record_origin_event(observed_at="2026-07-14T13:00:00", prefix="p", old_asn=1, new_asn=2)
 
     assert store.prune_origin_events(before="2026-07-07T00:00:00") == 1
+
+
+def test_rpki_scores_upsert_and_list(tmp_path):
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "rpki.db")
+    store.init_schema()
+    store.upsert_asn_names([(2856, "British Telecommunications PLC", "GB")])
+
+    store.upsert_rpki_score(asn=2856, total=100, valid=97, invalid=1, notfound=2)
+    store.upsert_rpki_score(asn=64500, total=10, valid=0, invalid=0, notfound=10)
+    # Re-scoring replaces.
+    store.upsert_rpki_score(asn=2856, total=101, valid=99, invalid=0, notfound=2)
+
+    scores = store.list_rpki_scores()
+
+    assert len(scores) == 2
+    bt = next(s for s in scores if s["asn"] == 2856)
+    assert bt["total"] == 101
+    assert bt["valid"] == 99
+    assert bt["name"] == "British Telecommunications PLC"
+    assert bt["checked_at"]

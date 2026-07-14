@@ -19,8 +19,9 @@ import os
 import time
 from datetime import datetime, timezone
 
-from .sources import refresh_asn_names
+from .sources import refresh_asn_names, refresh_rpki_scores
 from .store import RouteLensStore
+from .uk import UK_OPERATORS
 
 log = logging.getLogger("routelens.aggregator")
 
@@ -28,6 +29,7 @@ RIS_LIVE_URL = "wss://ris-live.ripe.net/v1/ws/?client=routelens-aggregator"
 FLUSH_INTERVAL_S = 15
 PRUNE_INTERVAL_S = 3600
 NAMES_REFRESH_S = 86400  # bgp.tools asks for at most daily fetches
+RPKI_REFRESH_S = 3600    # ~20 paced RouteViews calls per hour
 RETENTION_DAYS = int(os.environ.get("ROUTELENS_RETENTION_DAYS", "7"))
 
 
@@ -245,6 +247,7 @@ async def run(store: RouteLensStore) -> None:
     last_flush = time.time()
     last_prune = 0.0
     last_names = 0.0
+    last_rpki = 0.0
     retry_s = 1
 
     while True:
@@ -272,6 +275,22 @@ async def run(store: RouteLensStore) -> None:
                         removed += store.prune_origin_events(before=cutoff)
                         last_prune = now
                         log.info("pruned %d buckets older than %s", removed, cutoff)
+                    if now - last_rpki >= RPKI_REFRESH_S:
+                        last_rpki = now
+                        day_ago = datetime.fromtimestamp(now - 86400, tz=timezone.utc).strftime(
+                            "%Y-%m-%dT%H:%M:%S"
+                        )
+                        churners = [row["asn"] for row in store.asn_league(since=day_ago, limit=10)]
+                        targets = list(dict.fromkeys(UK_OPERATORS + churners))
+
+                        def _score(asns=targets) -> None:
+                            try:
+                                count = refresh_rpki_scores(store, asns)
+                                log.info("scored RPKI coverage for %d ASNs", count)
+                            except Exception as exc:
+                                log.warning("RPKI scoring failed: %s", exc)
+
+                        asyncio.get_running_loop().run_in_executor(None, _score)
                     if now - last_names >= NAMES_REFRESH_S:
                         # Off the event loop: a blocking multi-second fetch here
                         # would stall the stream and get us cut off as a slow consumer.

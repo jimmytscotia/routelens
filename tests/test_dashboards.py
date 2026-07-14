@@ -293,3 +293,34 @@ def test_origin_changes_partial_empty_and_bad_window(tmp_path):
     assert "no confirmed origin changes" in empty.data.decode().lower()
 
     assert client.get("/partials/dashboards/origin-changes?window=7").status_code == 400
+
+
+def test_rpki_scoreboard_page_and_partial(tmp_path):
+    app = _app(tmp_path)
+    store = app.config["ROUTELENS_STORE"]
+    store.upsert_asn_names([(2856, "British Telecommunications PLC", "GB"), (64666, "Sloppy Networks", "US")])
+    store.upsert_rpki_score(asn=2856, total=100, valid=97, invalid=0, notfound=3)
+    store.upsert_rpki_score(asn=64666, total=50, valid=10, invalid=3, notfound=37)
+    client = app.test_client()
+
+    page = client.get("/dashboards/rpki")
+    assert page.status_code == 200
+    assert b"RPKI" in page.data
+
+    body = client.get("/partials/dashboards/rpki").data.decode()
+    # Ranked by coverage: BT (97%) before Sloppy (20%).
+    assert body.index("AS2856") < body.index("AS64666")
+    assert "97%" in body
+    assert "signed" in body       # >=95% coverage verdict
+    assert "poor" in body         # <50% coverage verdict
+    # Invalid routes get called out loudly.
+    assert "3 invalid" in body
+    assert "uk-row" in body
+
+
+def test_rpki_scoreboard_empty_state(tmp_path):
+    client = _app(tmp_path).test_client()
+
+    body = client.get("/partials/dashboards/rpki").data.decode()
+
+    assert "no rpki scores yet" in body.lower()

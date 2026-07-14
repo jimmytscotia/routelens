@@ -274,3 +274,74 @@ def test_parse_asn_csv_handles_quoting_and_as_prefix():
     assert (2856, "British Telecommunications PLC", "GB") in rows
     assert (10003, "Ogaki Cable Television Co.,Inc.", "JP") in rows
     assert len(rows) == 2
+
+
+def test_summarize_routeviews_rpki_asn_counts_states():
+    from routelens.sources import summarize_rpki_asn
+
+    payload = {
+        "2856": {
+            "timestamp": "2026-07-14T19:00:13.434+00:00",
+            "prefix": [
+                {"5.35.192.0/21": "valid"},
+                {"5.80.0.0/15": "valid"},
+                {"192.0.2.0/24": "invalid"},
+                {"198.51.100.0/24": "notfound"},
+                {"203.0.113.0/24": "unknown"},
+            ],
+        }
+    }
+
+    counts = summarize_rpki_asn(payload, 2856)
+
+    assert counts == {"total": 5, "valid": 2, "invalid": 1, "notfound": 2}
+
+
+def test_refresh_rpki_scores_fetches_paced_and_upserts(store, monkeypatch):
+    from routelens.sources import refresh_rpki_scores
+
+    def fake_get(url, **kwargs):
+        assert "rpki" in url
+        asn = url.rsplit("=", 1)[-1]
+        return FakeResponse({asn: {"prefix": [{"192.0.2.0/24": "valid"}, {"198.51.100.0/24": "invalid"}]}})
+
+    monkeypatch.setattr(sources.requests, "get", fake_get)
+
+    scored = refresh_rpki_scores(store, [2856, 5607], pace_s=0)
+
+    assert scored == 2
+    rows = {s["asn"]: s for s in store.list_rpki_scores()}
+    assert rows[2856]["valid"] == 1
+    assert rows[2856]["invalid"] == 1
+    assert rows[5607]["total"] == 2
+
+
+def test_radar_route_stats_summarises_with_token(store, monkeypatch):
+    monkeypatch.setenv("CLOUDFLARE_RADAR_TOKEN", "test-token")
+    payload = {
+        "success": True,
+        "result": {
+            "stats": {
+                "routes_total": 1000000,
+                "routes_valid": 540000,
+                "routes_invalid": 4000,
+                "routes_unknown": 456000,
+            }
+        },
+    }
+    monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse(payload))
+    client = SourceClient(store)
+
+    result = client.radar_route_stats()
+
+    assert result["ok"] is True
+    assert result["data"]["routes_valid"] == 540000
+
+
+def test_radar_route_stats_unconfigured_without_token(store, monkeypatch):
+    monkeypatch.delenv("CLOUDFLARE_RADAR_TOKEN", raising=False)
+    client = SourceClient(store)
+
+    result = client.radar_route_stats()
+
+    assert result["ok"] is False and result["unconfigured"] is True
