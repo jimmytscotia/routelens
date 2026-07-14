@@ -1,0 +1,35 @@
+{% if rows %}
+<div class="tablewrap">
+<table class="datatable">
+  <thead>
+    <tr>
+      <th class="num" title="Rank by announced prefixes in the selected window">#</th>
+      <th title="Registration country of the originating ASNs, from bgp.tools. Allocation-based: where the network is registered, not necessarily where its traffic flows.">Country</th>
+      <th class="num" title="Total prefixes announced by networks registered in this country">Announced prefixes ({{ window_label }})</th>
+      <th class="num" title="How many distinct origin ASNs from this country were active in the window">Active origins</th>
+      <th class="num" title="Announcements per active origin — the instability signal. A country whose average network is churning hard stands out here regardless of size.">Intensity</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for row in rows %}
+    <tr{% if row.country == 'GB' %} class="uk-row"{% endif %}>
+      <td class="num mono">{{ row.rank }}</td>
+      <td><span class="flag" aria-hidden="true">{{ row.flag }}</span>{{ row.name }} <span class="mono" style="color:var(--faint)">{{ row.country }}</span></td>
+      <td class="num mono">{{ "{:,}".format(row.announcements) }}</td>
+      <td class="num mono">{{ "{:,}".format(row.origins) }}</td>
+      <td class="num mono">{{ "{:,}".format(row.intensity) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="attribution">Country is where each origin ASN is registered (allocation data), not measured traffic
+   location — a multinational's churn lands on its registration country. Spikes correlate with real incidents;
+   they are a prompt to look closer, not proof.</p>
+{% else %}
+<div class="empty">
+  <strong>No country data yet.</strong>
+  <p>The RIS Live aggregator hasn't recorded origin activity in this window, or ASN names
+     haven't been fetched yet (they refresh daily from bgp.tools).</p>
+</div>
+{% endif %}

@@ -406,3 +406,35 @@ def test_transit_partial_empty_and_bad_window(tmp_path):
     assert "aggregator" in empty.data.decode().lower()
 
     assert client.get("/partials/dashboards/transit?window=1").status_code == 400
+
+
+def test_country_league_page_and_partial(tmp_path):
+    app = _app(tmp_path)
+    store = app.config["ROUTELENS_STORE"]
+    store.upsert_asn_names([(1, "BR One", "BR"), (2, "BR Two", "BR"), (3, "GB One", "GB")])
+    store.record_asn_bucket(bucket_ts=_hour_bucket(0), asn=1, updates=100, announcements=120)
+    store.record_asn_bucket(bucket_ts=_hour_bucket(0), asn=2, updates=200, announcements=230)
+    store.record_asn_bucket(bucket_ts=_hour_bucket(0), asn=3, updates=50, announcements=60)
+    client = app.test_client()
+
+    page = client.get("/dashboards/countries")
+    assert page.status_code == 200
+    assert b"Country instability" in page.data
+
+    body = client.get("/partials/dashboards/countries?window=21600").data.decode()
+    assert body.index("Brazil") < body.index("United Kingdom")
+    # Flag emojis are derived from the ISO code.
+    assert "🇧🇷" in body and "🇬🇧" in body
+    # Intensity = announcements per active origin (350/2 = 175).
+    assert "175" in body
+    assert "uk-row" in body
+
+
+def test_country_league_partial_empty_and_bad_window(tmp_path):
+    client = _app(tmp_path).test_client()
+
+    empty = client.get("/partials/dashboards/countries?window=21600")
+    assert empty.status_code == 200
+    assert "aggregator" in empty.data.decode().lower()
+
+    assert client.get("/partials/dashboards/countries?window=2").status_code == 400

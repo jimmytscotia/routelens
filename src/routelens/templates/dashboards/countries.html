@@ -1,0 +1,39 @@
+{% extends "dashboards/_layout.html" %}
+{% block title %}Country instability · RouteLens{% endblock %}
+{% block dashboard %}
+  <div class="pagehead" style="padding-top:0">
+    <h1>Country instability</h1>
+    <p>BGP announcement churn grouped by the registration country of the originating networks.
+       A country spiking here often means an outage, a cable cut, or major maintenance in
+       progress. Watch the intensity column, not just the totals — big countries are always busy.</p>
+  </div>
+  <section class="panel">
+    <header class="phead">
+      <div class="windowtabs" role="tablist" aria-label="Time window">
+        {% for seconds, label in windows.items() %}
+        <button class="wtab{% if seconds == 21600 %} active{% endif %}" role="tab"
+                hx-get="/partials/dashboards/countries?window={{ seconds }}"
+                hx-target="#countryleague" hx-swap="innerHTML"
+                onclick="document.querySelectorAll('.wtab').forEach(b=>b.classList.remove('active'));this.classList.add('active')">
+          {{ label }}</button>
+        {% endfor %}
+      </div>
+      <span class="srctag">ris-live.ripe.net · countries: bgp.tools registration</span>
+    </header>
+    <div id="countryleague"
+         hx-get="/partials/dashboards/countries?window=21600"
+         hx-trigger="load, every 60s"
+         hx-swap="innerHTML">
+      <p class="loading">Loading…</p>
+    </div>
+  </section>
+<style>
+  .windowtabs{display:flex;gap:4px}
+  .wtab{background:var(--inset);border:1px solid var(--line);color:var(--muted);
+    font:inherit;font-size:.75rem;padding:4px 10px;border-radius:var(--r);cursor:pointer}
+  .wtab:hover{color:var(--ink)}
+  .wtab.active{color:var(--ink);border-color:var(--accent)}
+  .uk-row td{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+  .flag{font-size:1rem;margin-right:6px}
+</style>
+{% endblock %}

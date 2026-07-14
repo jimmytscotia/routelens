@@ -389,6 +389,25 @@ class RouteLensStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def country_league(self, *, since: str, limit: int = 50) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT n.country,
+                       SUM(a.updates) AS updates,
+                       SUM(a.announcements) AS announcements,
+                       COUNT(DISTINCT a.asn) AS origins
+                  FROM ris_asn_activity a
+                  JOIN asn_names n ON n.asn = a.asn AND n.country != ''
+                 WHERE a.bucket_ts >= ?
+                 GROUP BY n.country
+                 ORDER BY announcements DESC
+                 LIMIT ?
+                """,
+                (since, limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def prune_asn_activity(self, *, before: str) -> int:
         with self.connect() as conn:
             cur = conn.execute("DELETE FROM ris_asn_activity WHERE bucket_ts < ?", (before,))

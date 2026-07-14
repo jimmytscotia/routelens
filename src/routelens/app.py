@@ -309,6 +309,35 @@ def create_app(config: dict | None = None) -> Flask:
             window_label=TRANSIT_WINDOWS[window],
         )
 
+    COUNTRY_WINDOWS = {3600: "1 hour", 21600: "6 hours", 86400: "24 hours", 604800: "7 days"}
+
+    @app.get("/dashboards/countries")
+    def dashboard_countries():
+        return render_template("dashboards/countries.html", windows=COUNTRY_WINDOWS)
+
+    @app.get("/partials/dashboards/countries")
+    def partial_dashboard_countries():
+        from datetime import datetime, timedelta, timezone
+
+        from .countries import country_name, flag_emoji
+
+        try:
+            window = int(request.args.get("window", "21600"))
+        except ValueError:
+            abort(400)
+        if window not in COUNTRY_WINDOWS:
+            abort(400)
+        since = (datetime.now(timezone.utc) - timedelta(seconds=window)).strftime("%Y-%m-%dT%H:%M:%S")
+        rows = store.country_league(since=since, limit=50)
+        for rank, row in enumerate(rows, start=1):
+            row["rank"] = rank
+            row["name"] = country_name(row["country"])
+            row["flag"] = flag_emoji(row["country"])
+            row["intensity"] = round(row["announcements"] / row["origins"]) if row["origins"] else 0
+        return render_template(
+            "partials/country_league.html", rows=rows, window_label=COUNTRY_WINDOWS[window]
+        )
+
     @app.get("/dashboards/rpki")
     def dashboard_rpki():
         return render_template("dashboards/rpki.html")
