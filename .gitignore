@@ -31,3 +31,6 @@ instance/
 dist/
 build/
 .claude/
+
+# Private operational docs — NEVER commit (public repo)
+docs/private/

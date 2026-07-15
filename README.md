@@ -2,32 +2,19 @@
 
 RouteLens is a Flask/Jinja/SQLite network-health dashboard for the NextHop Lab blog demo. It compares public DNS, private lab DNS, HTTP health, TLS certificate posture, and RIPEstat BGP visibility, then renders a polished dark operations dashboard.
 
-## Current deployed service (vps-01 / Coolify — since 2026-07-15)
+## Deployment
 
-| Item | Value |
-|---|---|
-| Production URL | `https://routelens.nexthop.engineer/` — **public**, branch `main` |
-| Dev URL | `https://routelens-dev.nexthop.engineer/` — basic auth (`jim` / password manager), branch `dev` |
-| Host | `vps-01.nexthop.engineer` (OVH VPS, London), managed by Coolify v4 |
-| Build | `Dockerfile` (multi-target: `web`, `aggregator`), built by Coolify on push |
-| Web (prod) | Coolify app `routelens-web`, gunicorn `:8080`, 1g memory limit |
-| Aggregator (prod) | Coolify app `routelens-aggregator` (RIS Live daemon), 384m limit |
-| SQLite DB | Docker volume `routelens-data` → `/var/lib/routelens/routelens.db` (dev: `routelens-dev-data`) |
-| Collector | Coolify scheduled task `python -m routelens.cli`, every 15 min (prod + dev) |
-| Spacescan | Coolify scheduled task `python -m routelens.spacescan`, daily 04:40 UTC (prod only) |
-| TLS | automatic — wildcard `*.nexthop.engineer` cert via Traefik/Let's Encrypt |
-| DNS | public wildcard AND lab DNS both resolve to vps-01 (split-DNS record retired 2026-07-15) |
-
-Full deployment detail: `docs/deployment-vps-01.md`. The old svc-01/systemd
-deployment is retired-in-place (see Legacy note in that doc).
+RouteLens runs self-hosted on a UK VPS behind a reverse proxy with automatic
+TLS. Production tracks `main`; a separate authenticated dev instance tracks
+`dev`. Deploys are automatic on push (no manual steps). Operational details
+live outside this public repo (`docs/private/`, untracked).
 
 ## Development workflow (branch → dev → main)
 
 1. Branch from `dev` (or commit small changes to `dev` directly).
-2. Push to `dev` → auto-deploys to the dev URL in under a minute.
-3. Verify at `https://routelens-dev.nexthop.engineer/` (basic auth; own scratch DB).
-4. Merge `dev` → `main` → production auto-deploys. No other release steps exist.
-5. PR preview deployments are enabled via the GitHub App for feature-branch PRs.
+2. Push to `dev` → the dev instance redeploys automatically.
+3. Verify on the dev instance (it has its own scratch database).
+4. Merge `dev` → `main` → production redeploys automatically.
 
 ## Stack
 
@@ -80,8 +67,6 @@ Expected:
 ```json
 {"service":"routelens","status":"ok"}
 ```
-
-(DNS quirks are gone: public and lab DNS now both resolve this hostname to vps-01.)
 
 ## Main source files
 

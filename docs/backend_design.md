@@ -31,9 +31,9 @@ Seed resources:
 | name | type | expected |
 |---|---|---|
 | `nexthop.engineer` | hostname | public A/AAAA includes `66.241.124.199`, HTTPS healthy |
-| `web.nexthop.engineer` | hostname | private/lab DNS to `100.94.135.62`, no public DNS leak |
-| `grafana.nexthop.engineer` | hostname | private/lab DNS to `100.94.135.62`, no public DNS leak |
-| `prometheus.nexthop.engineer` | hostname | private/lab DNS to `100.94.135.62`, no public DNS leak |
+| `web.nexthop.engineer` | hostname | private/lab DNS to `<LAB-INGRESS-IP>`, no public DNS leak |
+| `grafana.nexthop.engineer` | hostname | private/lab DNS to `<LAB-INGRESS-IP>`, no public DNS leak |
+| `prometheus.nexthop.engineer` | hostname | private/lab DNS to `<LAB-INGRESS-IP>`, no public DNS leak |
 | `8.8.8.0/24` | prefix | public BGP, expected origin AS15169 |
 | `1.1.1.0/24` | prefix | public BGP, expected origin AS13335 |
 
@@ -129,7 +129,7 @@ Ingestion flow:
 - Public hostname is healthy when public answer equals expected `66.241.124.199`.
 - Public hostname is critical when public resolvers return NXDOMAIN/no answer.
 - Public hostname is warning when it resolves, but not to expected IPs.
-- Private lab host is healthy when public DNS is absent and private DNS returns `100.94.135.62`.
+- Private lab host is healthy when public DNS is absent and private DNS returns `<LAB-INGRESS-IP>`.
 - Private lab host is critical when public resolvers return private/lab address or any public answer.
 - Split-horizon mismatch: private resolver returns an unexpected IP -> warning/critical based on policy.
 - Resolver partial failure: one public resolver times out but others agree -> warning with resolver error details.

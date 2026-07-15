@@ -59,35 +59,19 @@ Follow strict TDD for new behavior:
 4. Re-run the specific test.
 5. Run the full suite with `uv run pytest -q`.
 
-## Current deployment facts (vps-01 / Coolify — since 2026-07-15)
+## Deployment (summary — details are PRIVATE)
 
-RouteLens runs on Jim's OVH VPS (`vps-01.nexthop.engineer`), managed by Coolify.
-**Read `docs/deployment-vps-01.md` for the full picture.** Essentials:
+RouteLens is self-hosted; production tracks `main`, the authenticated dev
+instance tracks `dev`, and **publishing = `git push`** (auto-deploy, no manual
+steps). ALL operational specifics — hosts, app/volume names, schedules, URLs,
+auth, backup posture — live in `docs/private/deployment-vps-01.md`, which is
+**gitignored because this repo is PUBLIC**. Read it at session start; never
+copy its contents into tracked files. The platform side is owned by the
+vps-platform session; infra changes go through Jim.
 
-- **Production** = branch `main` → `https://routelens.nexthop.engineer/` (PUBLIC).
-- **Dev** = branch `dev` → `https://routelens-dev.nexthop.engineer/` (basic auth
-  `jim` / password in Jim's password manager; own scratch SQLite DB).
-- **Publishing = `git push`.** Push `dev` → dev redeploys. Merge `dev`→`main` and
-  push → production redeploys. Nothing else to do: Coolify builds the
-  `Dockerfile`, Traefik routes + TLS are automatic. Typical push→live: 15–60s.
-- The `Dockerfile` is multi-target (`web` = gunicorn dashboard, `aggregator` =
-  RIS Live daemon). **Do not rename the targets or the gunicorn entrypoint**
-  (`routelens.app:create_app()`) — Coolify's two prod apps build from them.
-- SQLite lives on a Docker volume (`/var/lib/routelens/routelens.db`), NOT in
-  the image. `ROUTELENS_DATABASE` env is baked in; retention env is set in
-  Coolify. Never commit a DB file.
-- Collector + spacescan run as Coolify scheduled tasks (cron-style, exec'd in
-  the web container) — the systemd units in `deploy/` are svc-01-era legacy.
-- The vps-platform Claude session (see `~/Developer/personal/vps-platform/`)
-  owns the server/Coolify side; this session owns the app. Infra asks
-  (domains, volumes, schedules, resources) go through Jim to that session.
-
-## Deployment history note
-
-Until 2026-07-15 RouteLens ran on lab VM `svc-01` (systemd + Caddy, lab-only
-via split-DNS). That instance is retired-in-place; the lab DNS record was
-removed, so all clients now reach vps-01. `docs/deployment_handoff.md` and
-`docs/HANDOFF_SUMMARY.md` describe that era — historical reference only.
+Contract for this repo: do not rename the Dockerfile targets (`web`,
+`aggregator`) or the gunicorn entrypoint (`routelens.app:create_app()`), and
+never commit DB files or secrets — deploys build straight from this repo.
 
 ## Guardrails
 
@@ -164,11 +148,12 @@ route servers see a prefix) and UK-specific activity dashboards.
 
 ## Publishing status
 
-RouteLens went PUBLIC at https://routelens.nexthop.engineer on 2026-07-15
-(Jim signed off). Consequences to keep in mind now the audience is public:
+RouteLens is live and public at https://routelens.nexthop.engineer
+(since 2026-07-15). Now that the audience is public:
 
 - Mind upstream API rate limits (RIPEstat, RouteViews, bgp.tools, PeeringDB,
   Globalping) — the dashboard is no longer lab-only traffic.
 - Cloudflare Radar data is CC BY-NC — keep the attribution visible.
-- The blog embed/link from https://nexthop.engineer remains a future task
-  (that site is still on Fly.io pending its own migration).
+- **This repo is PUBLIC**: operational/infra details belong in `docs/private/`
+  (gitignored), never in tracked files. A security review (2026-07-15) found
+  no leaked secrets but flagged infra detail leakage — keep it that way.
