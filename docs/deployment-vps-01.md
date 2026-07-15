@@ -1,9 +1,8 @@
 # Deployment: vps-01 (Coolify) — the CURRENT production home
 
 > Written 2026-07-15 by the vps-platform Claude session after migrating
-> RouteLens from svc-01 to the OVH VPS. **RouteLens session: please reconcile
-> README.md ("Current deployed service" table), CLAUDE.md and docs/ with the
-> facts below, then delete this note-to-you paragraph.**
+> RouteLens from svc-01 to the OVH VPS. README.md and CLAUDE.md were updated
+> the same day; this file is the canonical deployment reference.
 
 ## Where RouteLens runs now
 
@@ -39,7 +38,9 @@ Still work: the VPS is on Jim's tailnet, and containers can reach the lab DNS
 ## Legacy (svc-01) — DO NOT build on this
 
 The old systemd deployment on svc-01 (`/opt/routelens`, Caddy, the units in
-`deploy/`) is pending retirement; the lab split-DNS record still points lab
-clients at svc-01 until cutover. Treat `deploy/*.service|timer` as historical
+`deploy/`) is retired-in-place: the lab split-DNS record was removed on
+2026-07-15 (Hermes), so ALL clients — lab and public — now reach vps-01.
+svc-01's routelens services still run but serve nobody; stopping/removing them
+is a pending lab housekeeping task (Hermes). Treat `deploy/*.service|timer` as historical
 artefacts of that setup; their resource limits informed the Coolify limits.
 README gap "deployment automation to svc-01" is obsolete — Coolify replaced it.

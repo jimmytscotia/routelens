@@ -1,3 +1,5 @@
+> **HISTORICAL (svc-01 era, pre-2026-07-15).** RouteLens now runs on vps-01 via Coolify — see `deployment-vps-01.md`.
+
 # RouteLens MacBook + Claude Code handoff
 
 This document is for continuing RouteLens development from Claude Code inside Visual Studio Code on Jim's MacBook Pro.

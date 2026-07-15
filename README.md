@@ -2,19 +2,32 @@
 
 RouteLens is a Flask/Jinja/SQLite network-health dashboard for the NextHop Lab blog demo. It compares public DNS, private lab DNS, HTTP health, TLS certificate posture, and RIPEstat BGP visibility, then renders a polished dark operations dashboard.
 
-## Current deployed service
+## Current deployed service (vps-01 / Coolify — since 2026-07-15)
 
 | Item | Value |
 |---|---|
-| URL | `https://routelens.nexthop.engineer/` |
-| Runtime VM | `svc-01` |
-| App path on VM | `/opt/routelens` |
-| SQLite DB on VM | `/var/lib/routelens/routelens.db` |
-| Gunicorn bind | `127.0.0.1:8097` |
-| systemd service | `routelens.service` |
-| collector timer | `routelens-collector.timer`, every 15 minutes |
-| Caddy ingress | `routelens.nexthop.engineer -> 127.0.0.1:8097` |
-| Split-DNS | `routelens.nexthop.engineer -> 100.94.135.62` via `net-01` |
+| Production URL | `https://routelens.nexthop.engineer/` — **public**, branch `main` |
+| Dev URL | `https://routelens-dev.nexthop.engineer/` — basic auth (`jim` / password manager), branch `dev` |
+| Host | `vps-01.nexthop.engineer` (OVH VPS, London), managed by Coolify v4 |
+| Build | `Dockerfile` (multi-target: `web`, `aggregator`), built by Coolify on push |
+| Web (prod) | Coolify app `routelens-web`, gunicorn `:8080`, 1g memory limit |
+| Aggregator (prod) | Coolify app `routelens-aggregator` (RIS Live daemon), 384m limit |
+| SQLite DB | Docker volume `routelens-data` → `/var/lib/routelens/routelens.db` (dev: `routelens-dev-data`) |
+| Collector | Coolify scheduled task `python -m routelens.cli`, every 15 min (prod + dev) |
+| Spacescan | Coolify scheduled task `python -m routelens.spacescan`, daily 04:40 UTC (prod only) |
+| TLS | automatic — wildcard `*.nexthop.engineer` cert via Traefik/Let's Encrypt |
+| DNS | public wildcard AND lab DNS both resolve to vps-01 (split-DNS record retired 2026-07-15) |
+
+Full deployment detail: `docs/deployment-vps-01.md`. The old svc-01/systemd
+deployment is retired-in-place (see Legacy note in that doc).
+
+## Development workflow (branch → dev → main)
+
+1. Branch from `dev` (or commit small changes to `dev` directly).
+2. Push to `dev` → auto-deploys to the dev URL in under a minute.
+3. Verify at `https://routelens-dev.nexthop.engineer/` (basic auth; own scratch DB).
+4. Merge `dev` → `main` → production auto-deploys. No other release steps exist.
+5. PR preview deployments are enabled via the GitHub App for feature-branch PRs.
 
 ## Stack
 
@@ -56,12 +69,10 @@ Expected current test result at handoff:
 18 passed
 ```
 
-## Important lab access notes
-
-The MacBook Pro is on Tailscale, but it may not use `net-01` as its DNS resolver by default. If `routelens.nexthop.engineer` does not resolve from the MacBook, test with:
+## Health check
 
 ```bash
-curl --resolve routelens.nexthop.engineer:443:100.94.135.62 https://routelens.nexthop.engineer/healthz
+curl -fsS https://routelens.nexthop.engineer/healthz
 ```
 
 Expected:
@@ -69,6 +80,8 @@ Expected:
 ```json
 {"service":"routelens","status":"ok"}
 ```
+
+(DNS quirks are gone: public and lab DNS now both resolve this hostname to vps-01.)
 
 ## Main source files
 
@@ -86,13 +99,13 @@ Expected:
 
 ## Current gaps / next development targets
 
-1. Improve MacBook/client DNS ergonomics for `routelens.nexthop.engineer`.
+1. ~~MacBook/client DNS ergonomics~~ — resolved by the 2026-07-15 VPS cutover.
 2. Add BGP path visualisation on prefix detail pages.
 3. Add DNS public/private comparison panels.
 4. Add a safe “run checks now” UI button or authenticated admin route.
-5. Add deployment automation script from repo to `svc-01`.
+5. ~~Deployment automation to svc-01~~ — obsolete; Coolify push-to-deploy replaced it.
 6. Polish responsive UI and take blog-ready screenshots.
-7. Add GitHub Actions CI once the repo is pushed to GitHub.
+7. Add GitHub Actions CI (repo is on GitHub; run `pytest` on PRs before merge to `dev`/`main`).
 
 ## Guardrails
 

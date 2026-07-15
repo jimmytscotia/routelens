@@ -1,3 +1,5 @@
+> **HISTORICAL (svc-01 era, pre-2026-07-15).** RouteLens now runs on vps-01 via Coolify — see `deployment-vps-01.md`.
+
 # RouteLens development handoff summary
 
 Date: 2026-07-14

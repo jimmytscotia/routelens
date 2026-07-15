@@ -59,35 +59,35 @@ Follow strict TDD for new behavior:
 4. Re-run the specific test.
 5. Run the full suite with `uv run pytest -q`.
 
-## Current deployment facts
+## Current deployment facts (vps-01 / Coolify — since 2026-07-15)
 
-RouteLens is deployed on `svc-01`:
+RouteLens runs on Jim's OVH VPS (`vps-01.nexthop.engineer`), managed by Coolify.
+**Read `docs/deployment-vps-01.md` for the full picture.** Essentials:
 
-- App path: `/opt/routelens`
-- DB: `/var/lib/routelens/routelens.db`
-- systemd app service: `routelens.service`
-- systemd collector timer: `routelens-collector.timer`
-- Gunicorn: `127.0.0.1:8097`
-- Caddy host: `https://routelens.nexthop.engineer/`
-- Split-DNS A record: `routelens.nexthop.engineer -> 100.94.135.62`
-- Let’s Encrypt SAN includes `routelens.nexthop.engineer`
+- **Production** = branch `main` → `https://routelens.nexthop.engineer/` (PUBLIC).
+- **Dev** = branch `dev` → `https://routelens-dev.nexthop.engineer/` (basic auth
+  `jim` / password in Jim's password manager; own scratch SQLite DB).
+- **Publishing = `git push`.** Push `dev` → dev redeploys. Merge `dev`→`main` and
+  push → production redeploys. Nothing else to do: Coolify builds the
+  `Dockerfile`, Traefik routes + TLS are automatic. Typical push→live: 15–60s.
+- The `Dockerfile` is multi-target (`web` = gunicorn dashboard, `aggregator` =
+  RIS Live daemon). **Do not rename the targets or the gunicorn entrypoint**
+  (`routelens.app:create_app()`) — Coolify's two prod apps build from them.
+- SQLite lives on a Docker volume (`/var/lib/routelens/routelens.db`), NOT in
+  the image. `ROUTELENS_DATABASE` env is baked in; retention env is set in
+  Coolify. Never commit a DB file.
+- Collector + spacescan run as Coolify scheduled tasks (cron-style, exec'd in
+  the web container) — the systemd units in `deploy/` are svc-01-era legacy.
+- The vps-platform Claude session (see `~/Developer/personal/vps-platform/`)
+  owns the server/Coolify side; this session owns the app. Infra asks
+  (domains, volumes, schedules, resources) go through Jim to that session.
 
-SSH for deployment checks, if Jim has provided keys on the MacBook:
+## Deployment history note
 
-```bash
-ssh lab@svc-01
-ssh lab@net-01
-```
-
-The working SSH identity from Hermes is named `nexthop_vm_admin`, but do not assume it exists on the MacBook unless Jim copied it there.
-
-## DNS note
-
-The MacBook is on Tailscale, but may not use `net-01` as DNS. If normal DNS fails, test RouteLens with explicit resolution:
-
-```bash
-curl --resolve routelens.nexthop.engineer:443:100.94.135.62 https://routelens.nexthop.engineer/healthz
-```
+Until 2026-07-15 RouteLens ran on lab VM `svc-01` (systemd + Caddy, lab-only
+via split-DNS). That instance is retired-in-place; the lab DNS record was
+removed, so all clients now reach vps-01. `docs/deployment_handoff.md` and
+`docs/HANDOFF_SUMMARY.md` describe that era — historical reference only.
 
 ## Guardrails
 
@@ -162,9 +162,13 @@ API, no auth — `/api/v1/status`, `/api/v1/routeservers`,
 Planned use: a "UK view" panel on prefix pages (how LON1/LON2/Manchester/Wales
 route servers see a prefix) and UK-specific activity dashboards.
 
-## Publishing intent
+## Publishing status
 
-Once Jim is happy with the lab build, RouteLens will be published publicly on
-https://nexthop.engineer (that site lives at ~/Developer/personal/nexthop-engineer,
-Flask on Fly.io). Get explicit sign-off before any public deploy; mind API
-rate limits and the Radar CC BY-NC attribution when the audience becomes public.
+RouteLens went PUBLIC at https://routelens.nexthop.engineer on 2026-07-15
+(Jim signed off). Consequences to keep in mind now the audience is public:
+
+- Mind upstream API rate limits (RIPEstat, RouteViews, bgp.tools, PeeringDB,
+  Globalping) — the dashboard is no longer lab-only traffic.
+- Cloudflare Radar data is CC BY-NC — keep the attribution visible.
+- The blog embed/link from https://nexthop.engineer remains a future task
+  (that site is still on Fly.io pending its own migration).
