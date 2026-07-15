@@ -262,3 +262,39 @@ def test_asn_prefixes_partial_lists_and_links(client):
 def test_asn_partials_reject_bad_asn(client):
     assert client.get("/partials/asn/summary?asn=abc").status_code == 400
     assert client.get("/partials/asn/prefixes?asn=-1").status_code == 400
+
+
+def test_prefix_page_includes_linx_panel(client):
+    body = client.get("/q?query=8.8.8.0/24").data.decode()
+
+    assert "/partials/prefix/linx?prefix=8.8.8.0/24" in body
+
+
+def test_linx_prefix_partial_groups_by_exchange(client, app):
+    class WithLinx(type(app.config["ROUTELENS_SOURCES"])):
+        pass
+
+    def linx_lookup(prefix):
+        return {"ok": True, "data": {"exchanges": [
+            {"group": "LINX Scotland", "routes": [
+                {"network": prefix, "rs": "RS1.SCO1 (IPv4)",
+                 "member": "Packet Clearing House (PCH)", "asn": 42, "as_path": [42]},
+            ]},
+        ]}}
+
+    app.config["ROUTELENS_SOURCES"].linx_lookup = linx_lookup
+
+    body = client.get("/partials/prefix/linx?prefix=8.8.8.0/24").data.decode()
+
+    assert "LINX Scotland" in body
+    assert "Packet Clearing House" in body
+    assert "AS42" in body
+
+
+def test_linx_prefix_partial_empty_states_bilateral_caveat(client, app):
+    app.config["ROUTELENS_SOURCES"].linx_lookup = lambda prefix: {"ok": True, "data": {"exchanges": []}}
+
+    body = client.get("/partials/prefix/linx?prefix=8.8.8.0/24").data.decode()
+
+    assert "route servers" in body
+    assert "bilateral" in body

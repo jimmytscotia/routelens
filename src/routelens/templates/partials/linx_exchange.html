@@ -1,0 +1,27 @@
+<header class="phead">
+  <h2>{{ group }}</h2>
+  <span class="srctag">alice-rs.linx.net</span>
+</header>
+<div class="kv"><span title="BGP sessions established on this exchange's route servers vs configured">Sessions up</span>
+  <strong>{{ totals.sessions_up }} / {{ totals.sessions }}</strong></div>
+<div class="kv"><span title="Distinct member ASNs with at least one established route-server session here">Members via RS</span>
+  <strong>{{ member_count }}</strong></div>
+<div class="kv"><span title="Routes currently held across this exchange's route servers (v4 + v6, both RS)">Routes received</span>
+  <strong>{{ "{:,}".format(totals.routes_received) }}</strong></div>
+<div class="tablewrap">
+<table class="datatable">
+  <tbody>
+  {% for rs in servers %}
+    <tr>
+      <td class="mono">{{ rs.name }}</td>
+      {% if rs.ok %}
+      <td class="num mono">{{ rs.sessions_up }}/{{ rs.sessions }} up</td>
+      <td class="num mono">{{ "{:,}".format(rs.routes_received) }} routes</td>
+      {% else %}
+      <td colspan="2"><span class="badge unknown" title="{{ rs.error }}">unavailable</span></td>
+      {% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>

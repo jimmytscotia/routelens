@@ -44,6 +44,12 @@ def nav() -> list[dict]:
             ],
         },
         {
+            "category": "United Kingdom",
+            "items": [
+                {"title": "LINX exchanges", "url": "/dashboards/linx", "status": "live"},
+            ],
+        },
+        {
             "category": "Routing table",
             "items": [
                 _dash("rpki"), _dash("address-space"),

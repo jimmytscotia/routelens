@@ -453,6 +453,59 @@ def create_app(config: dict | None = None) -> Flask:
         ]
         return jsonify({"origin_changes": origin_changes, "flaps": flaps})
 
+    # UK LANs lead, Scotland pinned first (Jim's ask); international follow.
+    LINX_UK_ORDER = ["LINX Scotland", "LINX LON1", "LINX LON2", "LINX Manchester", "LINX Wales"]
+
+    def _linx_exchange_sort_key(exchange: dict):
+        group = exchange["group"]
+        if group in LINX_UK_ORDER:
+            return (0, LINX_UK_ORDER.index(group))
+        return (1, group)
+
+    @app.get("/dashboards/linx")
+    def dashboard_linx():
+        result = _safe(lambda: sources().linx_routeservers())
+        exchanges = []
+        if result.get("ok"):
+            exchanges = sorted(result["data"]["exchanges"], key=_linx_exchange_sort_key)
+        return render_template(
+            "dashboards/linx.html", exchanges=exchanges, uk_groups=LINX_UK_ORDER,
+            error=None if result.get("ok") else result.get("error", "LINX Alice unavailable"),
+        )
+
+    @app.get("/partials/dashboards/linx-exchange")
+    def partial_linx_exchange():
+        group = request.args.get("group", "")
+        result = _safe(lambda: sources().linx_routeservers())
+        exchange = None
+        if result.get("ok"):
+            exchange = next((e for e in result["data"]["exchanges"] if e["group"] == group), None)
+        if exchange is None:
+            abort(404)
+        servers = []
+        member_asns: set = set()
+        totals = {"sessions": 0, "sessions_up": 0, "routes_received": 0}
+        for rs in exchange["routeservers"]:
+            nb = _safe(lambda rs_id=rs["id"]: sources().linx_neighbors(rs_id))
+            if nb.get("ok"):
+                data = nb["data"]
+                servers.append({**rs, **data, "ok": True})
+                member_asns.update(data["member_asns"])
+                for key in totals:
+                    totals[key] += data[key]
+            else:
+                servers.append({**rs, "ok": False, "error": nb.get("error", "unavailable")})
+        return render_template(
+            "partials/linx_exchange.html",
+            group=group, servers=servers, totals=totals, member_count=len(member_asns),
+        )
+
+    @app.get("/partials/prefix/linx")
+    def partial_prefix_linx():
+        prefix = request.args.get("prefix", "")
+        result = _safe(lambda: sources().linx_lookup(prefix))
+        return render_template("partials/linx_prefix.html", result=result, prefix=prefix)
+
     def _valid_asn_or_400() -> int:
         raw = request.args.get("asn", "")
         if not raw.isdigit() or not (0 < int(raw) <= 4_294_967_295):

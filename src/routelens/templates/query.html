@@ -53,6 +53,9 @@
     <section class="panel" hx-get="/partials/prefix/routing?prefix={{ prefix|urlencode }}" hx-trigger="load" hx-swap="innerHTML">
       <header class="phead"><h2>Routing status</h2><span class="srctag">stat.ripe.net</span></header><p class="loading">Loading…</p>
     </section>
+    <section class="panel" hx-get="/partials/prefix/linx?prefix={{ prefix|urlencode }}" hx-trigger="load" hx-swap="innerHTML">
+      <header class="phead"><h2>LINX view</h2><span class="srctag">alice-rs.linx.net</span></header><p class="loading">Loading…</p>
+    </section>
     <section class="panel" hx-get="/partials/prefix/routeviews?prefix={{ prefix|urlencode }}" hx-trigger="load" hx-swap="innerHTML">
       <header class="phead"><h2>RouteViews</h2><span class="srctag">api.routeviews.org</span></header><p class="loading">Loading…</p>
     </section>

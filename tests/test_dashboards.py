@@ -487,3 +487,68 @@ def test_address_space_empty_state(tmp_path):
     body = client.get("/partials/dashboards/address-space").data.decode()
 
     assert "no address-space scan yet" in body.lower()
+
+
+def test_linx_dashboard_shell_lists_exchanges_scotland_first(tmp_path, monkeypatch):
+    app = _app(tmp_path)
+
+    class FakeSources:
+        def linx_routeservers(self):
+            return {"ok": True, "data": {"exchanges": [
+                {"group": "LINX LON1", "routeservers": [{"id": "rs1-lon1-v4", "name": "RS1.LON1 (IPv4)"}]},
+                {"group": "LINX Nairobi", "routeservers": [{"id": "rs1-nai1-v4", "name": "RS1.NAI1 (IPv4)"}]},
+                {"group": "LINX Scotland", "routeservers": [{"id": "rs1-sco1-v4", "name": "RS1.SCO1 (IPv4)"}]},
+            ]}}
+
+    app.config["ROUTELENS_SOURCES"] = FakeSources()
+    client = app.test_client()
+
+    body = client.get("/dashboards/linx").data.decode()
+
+    # Scotland leads, UK before international.
+    assert body.index("LINX Scotland") < body.index("LINX LON1") < body.index("LINX Nairobi")
+    # Each exchange card lazy-loads its sessions.
+    assert "/partials/dashboards/linx-exchange?group=LINX%20Scotland" in body
+    # The sidebar gained a United Kingdom category.
+    assert "United Kingdom" in body
+
+
+def test_linx_exchange_partial_aggregates_routeservers(tmp_path):
+    app = _app(tmp_path)
+
+    class FakeSources:
+        def linx_routeservers(self):
+            return {"ok": True, "data": {"exchanges": [
+                {"group": "LINX Scotland", "routeservers": [
+                    {"id": "rs1-sco1-v4", "name": "RS1.SCO1 (IPv4)"},
+                    {"id": "rs1-sco1-v6", "name": "RS1.SCO1 (IPv6)"},
+                ]},
+            ]}}
+
+        def linx_neighbors(self, rs_id):
+            return {"ok": True, "data": {
+                "sessions": 30, "sessions_up": 28,
+                "routes_received": 150000, "member_asns": [42, 6939],
+            }}
+
+    app.config["ROUTELENS_SOURCES"] = FakeSources()
+    client = app.test_client()
+
+    body = client.get("/partials/dashboards/linx-exchange?group=LINX%20Scotland").data.decode()
+
+    assert "RS1.SCO1 (IPv4)" in body
+    assert "28" in body and "30" in body       # sessions up/total
+    assert "300,000" in body                    # routes across both RS
+    assert "2" in body                          # unique member ASNs (union)
+
+
+def test_linx_exchange_partial_unknown_group_404(tmp_path):
+    app = _app(tmp_path)
+
+    class FakeSources:
+        def linx_routeservers(self):
+            return {"ok": True, "data": {"exchanges": []}}
+
+    app.config["ROUTELENS_SOURCES"] = FakeSources()
+
+    assert app.test_client().get("/partials/dashboards/linx-exchange?group=Nope").status_code == 404

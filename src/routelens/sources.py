@@ -12,6 +12,10 @@ RIPESTAT_BASE = "https://stat.ripe.net/data"
 ROUTEVIEWS_BASE = "https://api.routeviews.org/guest"
 NLNOG_BASE = "https://lg.ring.nlnog.net/api"
 PEERINGDB_BASE = "https://www.peeringdb.com/api"
+# LINX's public Alice-LG instance for its route servers. The UK LANs
+# (LON1, LON2, Manchester, Scotland, Wales) live here; the separate
+# alice-collector host carries LINX's global collectors instead.
+LINX_RS_BASE = "https://alice-rs.linx.net/api/v1"
 GLOBALPING_BASE = "https://api.globalping.io/v1"
 RADAR_BASE = "https://api.cloudflare.com/client/v4/radar"
 
@@ -383,6 +387,86 @@ class SourceClient:
                 }
             )
         return {"ok": True, "data": {"status": payload.get("status"), "probes": probes}}
+
+    # ---- LINX Alice-LG ------------------------------------------------------
+
+    def linx_routeservers(self) -> dict[str, Any]:
+        """LINX route servers grouped by exchange, UK-first ordering
+        preserved from the API's own order."""
+
+        def summarize(payload: dict) -> dict[str, Any]:
+            exchanges: dict[str, list] = {}
+            for rs in payload.get("routeservers") or []:
+                exchanges.setdefault(rs.get("group") or "?", []).append(
+                    {"id": rs.get("id"), "name": rs.get("name")}
+                )
+            return {"exchanges": [{"group": g, "routeservers": rss} for g, rss in exchanges.items()]}
+
+        return self._cached_get(
+            "linx:routeservers",
+            f"{LINX_RS_BASE}/routeservers",
+            max_age_seconds=86400,
+            summarize=summarize,
+        )
+
+    def linx_neighbors(self, rs_id: str) -> dict[str, Any]:
+        """Session summary for one route server: members, state, routes."""
+
+        def summarize(payload: dict) -> dict[str, Any]:
+            neighbors = payload.get("neighbors") or payload.get("neighbours") or []
+            up = [n for n in neighbors if (n.get("state") or "").startswith("up")]
+            return {
+                "sessions": len(neighbors),
+                "sessions_up": len(up),
+                "routes_received": sum(n.get("routes_received") or 0 for n in up),
+                "member_asns": sorted({n["asn"] for n in up if n.get("asn")}),
+            }
+
+        return self._cached_get(
+            f"linx:neighbors:{rs_id}",
+            f"{LINX_RS_BASE}/routeservers/{rs_id}/neighbors",
+            max_age_seconds=900,
+            summarize=summarize,
+        )
+
+    def linx_lookup(self, prefix: str) -> dict[str, Any]:
+        """How LINX's route servers see a prefix, grouped by exchange.
+        Only routes learned via the route servers appear: members peering
+        bilaterally are invisible here, so absence is not 'not at LINX'."""
+        rs_map: dict[str, str] = {}
+        rs_meta = self.linx_routeservers()
+        if rs_meta.get("ok"):
+            for exchange in rs_meta["data"]["exchanges"]:
+                for rs in exchange["routeservers"]:
+                    rs_map[rs["id"]] = exchange["group"]
+
+        def summarize(payload: dict) -> dict[str, Any]:
+            imported = payload.get("imported") or {}
+            routes = imported.get("routes") if isinstance(imported, dict) else imported
+            grouped: dict[str, list] = {}
+            for route in routes or []:
+                rs = route.get("routeserver") or {}
+                rs_id = rs.get("id") or route.get("routeserver_id") or ""
+                group = rs_map.get(rs_id, rs.get("group") or "LINX")
+                neighbor = route.get("neighbor") or route.get("neighbour") or {}
+                grouped.setdefault(group, []).append(
+                    {
+                        "network": route.get("network"),
+                        "rs": rs.get("name") or rs_id,
+                        "member": neighbor.get("description") or "",
+                        "asn": neighbor.get("asn"),
+                        "as_path": (route.get("bgp") or {}).get("as_path") or [],
+                    }
+                )
+            return {"exchanges": [{"group": g, "routes": r} for g, r in grouped.items()]}
+
+        return self._cached_get(
+            f"linx:lookup:{prefix}",
+            f"{LINX_RS_BASE}/lookup/prefix",
+            params={"q": prefix},
+            max_age_seconds=600,
+            summarize=summarize,
+        )
 
     # ---- Global table growth (potaroo) -------------------------------------
 

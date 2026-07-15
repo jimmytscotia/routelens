@@ -136,15 +136,18 @@ Add a UK lens using LINX's public Alice-LG looking glasses (standard Alice REST
 API, no auth — `/api/v1/status`, `/api/v1/routeservers`,
 `/api/v1/lookup/prefix?q=<prefix>`):
 
-- `https://alice-collector.linx.net/` — LINX collectors (LON1, LON2, regional;
-  ~7M routes; route servers named e.g. COLLECTOR.LON1, COLLECTOR.MOM1)
-- `https://alice-rs.linx.net/` — LINX route servers (RS1/RS2 per LAN)
-- `https://alice-collector-center3.linx.net/` and
-  `https://alice-rs-center3.linx.net/` — NOTE: these are LINX's Middle East
-  exchanges (JED1/RIY1), not UK; verified 2026-07-14.
+- `https://alice-rs.linx.net/` — LINX route servers, nine exchanges: five UK
+  (LON1, LON2, Manchester MAN1, Scotland SCO1, Wales CAR1) + Nairobi, NoVA,
+  Mombasa, Accra. THE host for UK work. Verified 2026-07-15.
+- `https://alice-collector.linx.net/` — LINX collectors (LON1, Accra, Mombasa
+  — NB COLLECTOR.MOM1 is Mombasa, NOT Manchester; earlier note was wrong)
+- `*-center3.linx.net` hosts are LINX Middle East (JED1/RIY1), not UK.
 
-Planned use: a "UK view" panel on prefix pages (how LON1/LON2/Manchester/Wales
-route servers see a prefix) and UK-specific activity dashboards.
+SHIPPED 2026-07-15: /dashboards/linx (exchange cards, Scotland pinned first,
+sessions/members/routes per exchange, 15-min cache) + "LINX view" panel on
+prefix pages (cross-exchange lookup, bilateral-peering caveat). Sidebar gained
+a "United Kingdom" category. Route servers only see RS-peering members —
+absence ≠ not at LINX.
 
 ## Publishing status
 

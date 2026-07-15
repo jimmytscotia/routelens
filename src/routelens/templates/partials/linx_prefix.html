@@ -1,0 +1,36 @@
+<header class="phead"><h2>LINX view</h2><span class="srctag">alice-rs.linx.net</span></header>
+{% if result.ok %}
+{% if result.data.exchanges %}
+<div class="tablewrap">
+<table class="datatable">
+  <thead>
+    <tr>
+      <th title="The LINX exchange whose route servers hold this prefix">Exchange</th>
+      <th title="The member announcing it to the route server">Member</th>
+      <th title="AS path as seen by the route server">Path</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for exchange in result.data.exchanges %}
+    {% for route in exchange.routes %}
+    <tr>
+      <td>{{ exchange.group }}</td>
+      <td>{{ route.member }} (<a class="mono" href="/q?query=AS{{ route.asn }}">AS{{ route.asn }}</a>)</td>
+      <td class="mono">{{ route.as_path|join(' ') }}</td>
+    </tr>
+    {% endfor %}
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="attribution">Routes as held by LINX route servers; members peering bilaterally are not visible here.</p>
+{% else %}
+<div class="empty">
+  <strong>Not on the LINX route servers.</strong>
+  <p>No route-server member is announcing this prefix. That does not mean it's absent from LINX —
+     many networks peer bilaterally there, invisible to the route servers.</p>
+</div>
+{% endif %}
+{% else %}
+<div class="empty"><strong>LINX view unavailable.</strong><p>{{ result.error }}</p></div>
+{% endif %}

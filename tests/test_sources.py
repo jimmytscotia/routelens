@@ -479,3 +479,97 @@ def test_peeringdb_net_absent_network(store, monkeypatch):
 
     assert result["ok"] is True
     assert result["data"] is None
+
+
+LINX_ROUTESERVERS = {
+    "routeservers": [
+        {"id": "rs1-sco1-v4", "name": "RS1.SCO1 (IPv4)", "group": "LINX Scotland"},
+        {"id": "rs2-sco1-v4", "name": "RS2.SCO1 (IPv4)", "group": "LINX Scotland"},
+        {"id": "rs1-lon1-v4", "name": "RS1.LON1 (IPv4)", "group": "LINX LON1"},
+    ]
+}
+
+
+def test_linx_routeservers_groups_by_exchange(store, monkeypatch):
+    monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse(LINX_ROUTESERVERS))
+    client = SourceClient(store)
+
+    result = client.linx_routeservers()
+
+    assert result["ok"] is True
+    exchanges = result["data"]["exchanges"]
+    sco = next(e for e in exchanges if e["group"] == "LINX Scotland")
+    assert [rs["id"] for rs in sco["routeservers"]] == ["rs1-sco1-v4", "rs2-sco1-v4"]
+
+
+def test_linx_neighbors_summarises_sessions(store, monkeypatch):
+    payload = {
+        "neighbors": [
+            {"asn": 42, "description": "Packet Clearing House (PCH)", "state": "up", "routes_received": 33},
+            {"asn": 6939, "description": "Hurricane Electric", "state": "up", "routes_received": 100479},
+            {"asn": 64500, "description": "Down Member", "state": "down", "routes_received": 0},
+        ]
+    }
+    monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse(payload))
+    client = SourceClient(store)
+
+    result = client.linx_neighbors("rs1-sco1-v4")
+
+    assert result["ok"] is True
+    assert result["data"]["sessions"] == 3
+    assert result["data"]["sessions_up"] == 2
+    assert result["data"]["routes_received"] == 100512
+    assert 6939 in result["data"]["member_asns"]
+    assert 64500 not in result["data"]["member_asns"]  # down sessions aren't members present
+
+
+def test_linx_lookup_groups_routes_by_exchange(store, monkeypatch):
+    def fake_get(url, **kwargs):
+        if url.endswith("/routeservers"):
+            return FakeResponse(LINX_ROUTESERVERS)
+        return FakeResponse({
+            "imported": {
+                "routes": [
+                    {
+                        "network": "114.69.222.0/24",
+                        "routeserver": {"id": "rs1-sco1-v4", "name": "RS1.SCO1 (IPv4)"},
+                        "neighbor": {"asn": 42, "description": "Packet Clearing House (PCH)"},
+                        "bgp": {"as_path": [42]},
+                    },
+                    {
+                        "network": "114.69.222.0/24",
+                        "routeserver": {"id": "rs1-lon1-v4", "name": "RS1.LON1 (IPv4)"},
+                        "neighbor": {"asn": 42, "description": "Packet Clearing House (PCH)"},
+                        "bgp": {"as_path": [42]},
+                    },
+                ]
+            }
+        })
+
+    monkeypatch.setattr(sources.requests, "get", fake_get)
+    client = SourceClient(store)
+
+    result = client.linx_lookup("114.69.222.0/24")
+
+    assert result["ok"] is True
+    groups = result["data"]["exchanges"]
+    assert [g["group"] for g in groups] == ["LINX Scotland", "LINX LON1"]
+    sco = groups[0]
+    assert sco["routes"][0]["member"] == "Packet Clearing House (PCH)"
+    assert sco["routes"][0]["asn"] == 42
+    assert sco["routes"][0]["as_path"] == [42]
+
+
+def test_linx_lookup_empty_is_ok_not_error(store, monkeypatch):
+    def fake_get(url, **kwargs):
+        if url.endswith("/routeservers"):
+            return FakeResponse(LINX_ROUTESERVERS)
+        return FakeResponse({"imported": {"routes": []}})
+
+    monkeypatch.setattr(sources.requests, "get", fake_get)
+    client = SourceClient(store)
+
+    result = client.linx_lookup("8.8.8.0/24")
+
+    assert result["ok"] is True
+    assert result["data"]["exchanges"] == []
