@@ -489,66 +489,29 @@ def test_address_space_empty_state(tmp_path):
     assert "no address-space scan yet" in body.lower()
 
 
-def test_linx_dashboard_shell_lists_exchanges_scotland_first(tmp_path, monkeypatch):
+def test_linx_dashboard_removed_league_carries_the_uk_angle(tmp_path):
+    client = _app(tmp_path).test_client()
+
+    # The separate LINX activity section is gone...
+    assert client.get("/dashboards/linx").status_code == 404
+    assert client.get("/partials/dashboards/linx-exchange?group=LINX%20Scotland").status_code == 404
+    # ...and so is its sidebar category.
+    body = client.get("/dashboards/collectors").data.decode()
+    assert "United Kingdom" not in body
+    assert "/dashboards/linx" not in body
+
+
+def test_league_linx_tag_is_ixp_driven(tmp_path):
     app = _app(tmp_path)
-
-    class FakeSources:
-        def linx_routeservers(self):
-            return {"ok": True, "data": {"exchanges": [
-                {"group": "LINX LON1", "routeservers": [{"id": "rs1-lon1-v4", "name": "RS1.LON1 (IPv4)"}]},
-                {"group": "LINX Nairobi", "routeservers": [{"id": "rs1-nai1-v4", "name": "RS1.NAI1 (IPv4)"}]},
-                {"group": "LINX Scotland", "routeservers": [{"id": "rs1-sco1-v4", "name": "RS1.SCO1 (IPv4)"}]},
-            ]}}
-
-    app.config["ROUTELENS_SOURCES"] = FakeSources()
+    store = app.config["ROUTELENS_STORE"]
+    store.record_activity_bucket(bucket_ts=_bucket(1), rrc="rrc01", updates=10, announcements=9, withdrawals=1)
+    store.record_activity_bucket(bucket_ts=_bucket(1), rrc="rrc12", updates=10, announcements=9, withdrawals=1)
     client = app.test_client()
 
-    body = client.get("/dashboards/linx").data.decode()
+    body = client.get("/partials/dashboards/collectors?window=3600").data.decode()
 
-    # Scotland leads, UK before international.
-    assert body.index("LINX Scotland") < body.index("LINX LON1") < body.index("LINX Nairobi")
-    # Each exchange card lazy-loads its sessions.
-    assert "/partials/dashboards/linx-exchange?group=LINX%20Scotland" in body
-    # The sidebar gained a United Kingdom category.
-    assert "United Kingdom" in body
-
-
-def test_linx_exchange_partial_aggregates_routeservers(tmp_path):
-    app = _app(tmp_path)
-
-    class FakeSources:
-        def linx_routeservers(self):
-            return {"ok": True, "data": {"exchanges": [
-                {"group": "LINX Scotland", "routeservers": [
-                    {"id": "rs1-sco1-v4", "name": "RS1.SCO1 (IPv4)"},
-                    {"id": "rs1-sco1-v6", "name": "RS1.SCO1 (IPv6)"},
-                ]},
-            ]}}
-
-        def linx_neighbors(self, rs_id):
-            return {"ok": True, "data": {
-                "sessions": 30, "sessions_up": 28,
-                "routes_received": 150000, "member_asns": [42, 6939],
-            }}
-
-    app.config["ROUTELENS_SOURCES"] = FakeSources()
-    client = app.test_client()
-
-    body = client.get("/partials/dashboards/linx-exchange?group=LINX%20Scotland").data.decode()
-
-    assert "RS1.SCO1 (IPv4)" in body
-    assert "28" in body and "30" in body       # sessions up/total
-    assert "300,000" in body                    # routes across both RS
-    assert "2" in body                          # unique member ASNs (union)
-
-
-def test_linx_exchange_partial_unknown_group_404(tmp_path):
-    app = _app(tmp_path)
-
-    class FakeSources:
-        def linx_routeservers(self):
-            return {"ok": True, "data": {"exchanges": []}}
-
-    app.config["ROUTELENS_SOURCES"] = FakeSources()
-
-    assert app.test_client().get("/partials/dashboards/linx-exchange?group=Nope").status_code == 404
+    # The LINX tag rides on IXP hosting data and explains itself.
+    assert "hosted at LINX" in body
+    # Frankfurt (DE-CIX) gets no LINX tag.
+    rrc12_row = body[body.index('data-key="rrc12"'):body.index('data-key="rrc12"') + 400]
+    assert "LINX" not in rrc12_row

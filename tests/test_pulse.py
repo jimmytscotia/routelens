@@ -61,3 +61,34 @@ def test_pulse_map_has_layer_controls_and_data_sources(tmp_path):
     # Choropleth legend and the allocation caveat are present.
     assert 'id="map-legend"' in body
     assert "registration" in body
+
+
+def test_every_collector_carries_ixp_mapping():
+    from routelens.collectors import ACTIVE_COLLECTORS
+
+    for c in ACTIVE_COLLECTORS:
+        assert isinstance(c.get("ixps"), list), c["rrc"]
+        assert c.get("country"), c["rrc"]
+
+    # rrc01 is the only LINX-hosted collector (RIPE rrc-info, 2026-07-15).
+    linx_hosted = [c["rrc"] for c in ACTIVE_COLLECTORS if "LINX" in c["ixps"]]
+    assert linx_hosted == ["rrc01"]
+
+
+def test_collectors_at_returns_hosted_rrcs():
+    from routelens.collectors import collectors_at
+
+    assert [c["rrc"] for c in collectors_at("LINX")] == ["rrc01"]
+    assert [c["rrc"] for c in collectors_at("DE-CIX")] == ["rrc12"]
+    assert collectors_at("IX Scotland") == []
+
+
+def test_pulse_map_includes_linx_sites_layer(tmp_path):
+    client = _app(tmp_path).test_client()
+
+    body = client.get("/").data.decode()
+
+    assert "/api/map/linx" in body
+    assert "ixp-marker" in body
+    # The legend distinguishes collectors from exchange sites.
+    assert "LINX exchange" in body

@@ -67,6 +67,8 @@
 
   .marker{border-radius:50%;background:var(--accent);border:1px solid #cfeaff;cursor:pointer}
   .marker.quiet{background:var(--faint);border-color:var(--line-strong)}
+  .ixp-marker{width:11px;height:11px;background:var(--ok);border:1px solid #d8ffe8;
+    transform:rotate(45deg);cursor:pointer}
   .marker.flash{background:#fff;box-shadow:0 0 0 6px rgba(56,168,255,.35)}
   @media (prefers-reduced-motion: no-preference){
     .marker{transition:box-shadow .5s ease-out,background .5s ease-out}
@@ -191,11 +193,15 @@
     else showEvents();
   }
 
-  // Layer 1: collectors sized by real load (all 23, from the aggregator).
+  // Layer 1: collectors sized by real load (all 23, from the aggregator),
+  // plus LINX's five UK exchange sites as diamonds — a different marker for
+  // a different thing (route-server sites, not RIS collectors).
   function showCollectors() {
-    fetch('/api/map/collectors?window=3600')
-      .then(r => r.json())
-      .then(d => {
+    Promise.all([
+      fetch('/api/map/collectors?window=3600').then(r => r.json()),
+      fetch('/api/map/linx').then(r => r.json()).catch(() => ({sites: []})),
+    ])
+      .then(([d, linx]) => {
         if (activeLayer !== 'collectors') return;
         clearLayers();
         const group = L.layerGroup();
@@ -211,7 +217,23 @@
             .addTo(group);
           state.markers[c.rrc] = {marker, el, timeout: null};
         }
+        for (const s of linx.sites || []) {
+          const el = document.createElement('div');
+          el.className = 'ixp-marker';
+          const icon = L.divIcon({className: '', html: el, iconSize: [11, 11]});
+          L.marker([s.lat, s.lon], {icon, title: `${s.group} — ${s.city}`})
+            .bindPopup(`${s.group} · ${s.city}<br>` +
+                       `${s.sessions_up}/${s.sessions} route-server sessions up · ` +
+                       `${s.members} members · ${s.routes_received.toLocaleString()} routes held<br>` +
+                       `<span style="color:var(--faint)">route-server snapshot (Alice-LG), not update activity</span>`)
+            .addTo(group);
+        }
         layers.collectors = group.addTo(map);
+        const legend = $('map-legend');
+        legend.innerHTML =
+          '<span class="sw" style="background:#38a8ff;border-radius:50%"></span>RIS collector ' +
+          '<span class="sw" style="background:#3ddc97;transform:rotate(45deg)"></span>LINX exchange (route servers)';
+        legend.style.display = 'block';
       })
       .catch(e => mapFail('collector data failed: ' + e.message));
   }

@@ -18,7 +18,7 @@
   {% for row in rows %}
     <tr data-key="{{ row.rrc }}"{% if row.country == 'GB' %} class="uk-row"{% endif %}>
       <td class="num mono c-rank">{{ row.rank }}</td>
-      <td class="mono">{{ row.rrc }}{% if row.country == 'GB' %}<span class="uk-tag">UK · LINX</span>{% endif %}</td>
+      <td class="mono">{{ row.rrc }}{% if 'LINX' in row.ixps %}<span class="uk-tag" title="This collector is hosted at LINX in London — LINX's window onto this league. (Route-server views of the other LINX exchanges live on the looking glass.)">LINX</span>{% endif %}</td>
       <td>{{ row.city }}{% if row.country %}, {{ row.country }}{% endif %}</td>
       <td class="mono">{{ row.scope }}</td>
       <td class="num mono c-upd" data-v="{{ row.updates }}">{{ "{:,}".format(row.updates) }}</td>

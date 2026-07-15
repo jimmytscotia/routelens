@@ -23,6 +23,12 @@
     </div>
     {% endif %}
   </section>
+  {% if not (raw and raw.strip()) %}
+  <section class="panel" hx-get="/partials/linx-uk" hx-trigger="load" hx-swap="innerHTML">
+    <header class="phead"><h2>UK exchanges via LINX route servers</h2><span class="srctag">alice-rs.linx.net</span></header>
+    <p class="loading">Loading…</p>
+  </section>
+  {% endif %}
 {% else %}
   <div class="pagehead">
     <h1 class="mono">{{ raw }}</h1>

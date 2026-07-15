@@ -298,3 +298,33 @@ def test_linx_prefix_partial_empty_states_bilateral_caveat(client, app):
 
     assert "route servers" in body
     assert "bilateral" in body
+
+
+def test_bare_looking_glass_shows_uk_exchange_strip(client):
+    body = client.get("/q").data.decode()
+
+    assert "/partials/linx-uk" in body
+
+
+def test_linx_uk_strip_lists_exchanges_scotland_first(client, app):
+    class StripSources:
+        def linx_routeservers(self):
+            return {"ok": True, "data": {"exchanges": [
+                {"group": "LINX LON1", "routeservers": [{"id": "rs1-lon1-v4", "name": "RS1.LON1 (IPv4)"}]},
+                {"group": "LINX Scotland", "routeservers": [{"id": "rs1-sco1-v4", "name": "RS1.SCO1 (IPv4)"}]},
+            ]}}
+
+        def linx_neighbors(self, rs_id):
+            return {"ok": True, "data": {
+                "sessions": 30, "sessions_up": 28, "routes_received": 150000,
+                "member_asns": [42, 6939],
+            }}
+
+    app.config["ROUTELENS_SOURCES"] = StripSources()
+
+    body = client.get("/partials/linx-uk").data.decode()
+
+    assert body.index("LINX Scotland") < body.index("LINX LON1")
+    assert "28" in body and "150,000" in body
+    # Honest framing: route-server snapshots, not activity.
+    assert "route server" in body.lower()

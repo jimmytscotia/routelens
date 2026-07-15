@@ -93,3 +93,52 @@ def test_map_apis_reject_bad_window(tmp_path):
     for path in ("/api/map/collectors", "/api/map/countries", "/api/map/events"):
         assert client.get(f"{path}?window=59").status_code == 400
         assert client.get(f"{path}?window=nope").status_code == 400
+
+
+class FakeLinxSources:
+    def linx_routeservers(self):
+        return {"ok": True, "data": {"exchanges": [
+            {"group": "LINX Scotland", "routeservers": [{"id": "rs1-sco1-v4", "name": "RS1.SCO1 (IPv4)"}]},
+            {"group": "LINX LON1", "routeservers": [{"id": "rs1-lon1-v4", "name": "RS1.LON1 (IPv4)"}]},
+            {"group": "LINX Nairobi", "routeservers": [{"id": "rs1-nai1-v4", "name": "RS1.NAI1 (IPv4)"}]},
+        ]}}
+
+    def linx_neighbors(self, rs_id):
+        return {"ok": True, "data": {
+            "sessions": 30, "sessions_up": 28, "routes_received": 150000,
+            "member_asns": [42, 6939],
+        }}
+
+
+def test_map_linx_returns_uk_sites_with_coords_and_alice_summary(tmp_path):
+    app = _app(tmp_path)
+    app.config["ROUTELENS_SOURCES"] = FakeLinxSources()
+    client = app.test_client()
+
+    payload = client.get("/api/map/linx").get_json()
+
+    sites = payload["sites"]
+    # UK LANs only on the map: the international exchanges aren't the UK story.
+    assert {s["group"] for s in sites} <= {
+        "LINX Scotland", "LINX LON1", "LINX LON2", "LINX Manchester", "LINX Wales"
+    }
+    sco = next(s for s in sites if s["group"] == "LINX Scotland")
+    assert sco["city"] == "Edinburgh"
+    assert 55 < sco["lat"] < 57 and -4 < sco["lon"] < -2
+    assert sco["sessions_up"] == 28
+    assert sco["members"] == 2
+    assert sco["routes_received"] == 150000
+
+
+def test_map_linx_omits_unreachable_exchanges(tmp_path):
+    app = _app(tmp_path)
+
+    class Down:
+        def linx_routeservers(self):
+            return {"ok": False, "error": "alice down"}
+
+    app.config["ROUTELENS_SOURCES"] = Down()
+
+    payload = app.test_client().get("/api/map/linx").get_json()
+
+    assert payload["sites"] == []

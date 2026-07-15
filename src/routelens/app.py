@@ -201,6 +201,7 @@ def create_app(config: dict | None = None) -> Flask:
                     "city": info.get("city", "?"),
                     "country": info.get("country", ""),
                     "scope": info.get("scope", ""),
+                    "ixps": info.get("ixps", []),
                     "per_minute": round(entry["updates"] / max(entry["minutes"], 1)),
                     "spark": _sparkline_points([v for _, v in series]),
                 }
@@ -462,43 +463,51 @@ def create_app(config: dict | None = None) -> Flask:
             return (0, LINX_UK_ORDER.index(group))
         return (1, group)
 
-    @app.get("/dashboards/linx")
-    def dashboard_linx():
-        result = _safe(lambda: sources().linx_routeservers())
-        exchanges = []
-        if result.get("ok"):
-            exchanges = sorted(result["data"]["exchanges"], key=_linx_exchange_sort_key)
-        return render_template(
-            "dashboards/linx.html", exchanges=exchanges, uk_groups=LINX_UK_ORDER,
-            error=None if result.get("ok") else result.get("error", "LINX Alice unavailable"),
-        )
+    @app.get("/api/map/linx")
+    def api_map_linx():
+        from .uk import LINX_UK_SITES
 
-    @app.get("/partials/dashboards/linx-exchange")
-    def partial_linx_exchange():
-        group = request.args.get("group", "")
+        sites = []
+        for site in LINX_UK_SITES:
+            summary = _linx_group_summary(site["group"])
+            if summary:
+                sites.append({**site, **summary, "kind": "linx"})
+        return jsonify({"sites": sites})
+
+    @app.get("/partials/linx-uk")
+    def partial_linx_uk():
+        from .uk import LINX_UK_SITES
+
+        rows = []
+        for site in LINX_UK_SITES:
+            summary = _linx_group_summary(site["group"])
+            if summary:
+                rows.append({**site, **summary})
+        return render_template("partials/linx_uk_strip.html", rows=rows)
+
+    def _linx_group_summary(group: str) -> dict | None:
+        """Aggregate one LINX exchange's route servers via Alice-LG.
+        Returns None when the exchange is unknown or Alice is unreachable."""
         result = _safe(lambda: sources().linx_routeservers())
-        exchange = None
-        if result.get("ok"):
-            exchange = next((e for e in result["data"]["exchanges"] if e["group"] == group), None)
+        if not result.get("ok"):
+            return None
+        exchange = next((e for e in result["data"]["exchanges"] if e["group"] == group), None)
         if exchange is None:
-            abort(404)
-        servers = []
+            return None
         member_asns: set = set()
         totals = {"sessions": 0, "sessions_up": 0, "routes_received": 0}
+        reachable = 0
         for rs in exchange["routeservers"]:
             nb = _safe(lambda rs_id=rs["id"]: sources().linx_neighbors(rs_id))
             if nb.get("ok"):
+                reachable += 1
                 data = nb["data"]
-                servers.append({**rs, **data, "ok": True})
                 member_asns.update(data["member_asns"])
                 for key in totals:
                     totals[key] += data[key]
-            else:
-                servers.append({**rs, "ok": False, "error": nb.get("error", "unavailable")})
-        return render_template(
-            "partials/linx_exchange.html",
-            group=group, servers=servers, totals=totals, member_count=len(member_asns),
-        )
+        if not reachable:
+            return None
+        return {"group": group, **totals, "members": len(member_asns)}
 
     @app.get("/partials/prefix/linx")
     def partial_prefix_linx():

@@ -1,0 +1,35 @@
+<header class="phead">
+  <h2>UK exchanges via LINX route servers</h2>
+  <span class="srctag">alice-rs.linx.net · 15-min snapshots</span>
+</header>
+{% if rows %}
+<div class="tablewrap">
+<table class="datatable">
+  <thead>
+    <tr>
+      <th title="LINX peering LAN">Exchange</th>
+      <th title="Where the LAN operates">City</th>
+      <th class="num" title="BGP sessions established on the exchange's route servers vs configured">Sessions up</th>
+      <th class="num" title="Distinct member ASNs with at least one established route-server session">Members via RS</th>
+      <th class="num" title="Routes currently held across the exchange's route servers (route-server snapshot, not update activity)">Routes held</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for row in rows %}
+    <tr>
+      <td>{{ row.group }}</td>
+      <td>{{ row.city }}</td>
+      <td class="num mono">{{ row.sessions_up }} / {{ row.sessions }}</td>
+      <td class="num mono">{{ row.members }}</td>
+      <td class="num mono">{{ "{:,}".format(row.routes_received) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="attribution">Route-server table snapshots — a different measure from the activity league.
+   Members peering bilaterally at LINX are not visible to route servers.</p>
+{% else %}
+<div class="empty"><strong>LINX route servers unreachable right now.</strong>
+  <p>The strip repopulates automatically when Alice-LG responds again.</p></div>
+{% endif %}
