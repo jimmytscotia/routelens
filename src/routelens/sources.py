@@ -21,7 +21,7 @@ RADAR_BASE = "https://api.cloudflare.com/client/v4/radar"
 
 # Polite User-Agent for bulk/courtesy data sources (bgp.tools requires a
 # reachable contact). The mailbox is monitored by the admin.
-USER_AGENT = "RouteLens/1.0 (https://routelens.nexthop.engineer; noc.nexthope@agentmail.to)"
+USER_AGENT = "RouteLens/1.0 (https://routelens.nexthop.engineer; noc.nexthop@agentmail.to)"
 ASN_CSV_URL = "https://bgp.tools/asns.csv"
 
 
