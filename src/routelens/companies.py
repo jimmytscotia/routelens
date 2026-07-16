@@ -59,9 +59,8 @@ COMPANIES = [
     {"name": "Sage", "category": "UK services", "asns": [], "uk": True,
      "status": {"type": "statuspage", "url": "https://status.sage.com/api/v2/status.json"}},
     {"name": "BBC", "category": "UK services", "asns": [2818], "status": None, "uk": True},
-    {"name": "Lloyds Banking Group", "category": "UK banks", "asns": [8435], "status": None, "uk": True},
-    {"name": "Barclays", "category": "UK banks", "asns": [44022], "status": None, "uk": True},
-    {"name": "NatWest", "category": "UK banks", "asns": [21054], "status": None, "uk": True},
+    # Banks deliberately excluded: heavily regulated and litigation-sensitive,
+    # and a BGP-only "unstable" flag on a bank is high-risk for little value.
 ]
 
 
