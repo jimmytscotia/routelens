@@ -122,12 +122,23 @@ def test_map_linx_returns_uk_sites_with_coords_and_alice_summary(tmp_path):
     assert {s["group"] for s in sites} <= {
         "LINX Scotland", "LINX LON1", "LINX LON2", "LINX Manchester", "LINX Wales"
     }
-    sco = next(s for s in sites if s["group"] == "LINX Scotland")
-    assert sco["city"] == "Edinburgh"
-    assert 55 < sco["lat"] < 57 and -4 < sco["lon"] < -2
-    assert sco["sessions_up"] == 28
-    assert sco["members"] == 2
-    assert sco["routes_received"] == 150000
+    # LINX Scotland spans two data centres: both appear, sharing the
+    # exchange's Alice summary, each labelled with its own site.
+    sco_sites = [s for s in sites if s["group"] == "LINX Scotland"]
+    assert len(sco_sites) == 2
+    names = {s["site"] for s in sco_sites}
+    assert any("Pulsant" in n or "Edinburgh" in n for n in names)
+    assert any("DataVita" in n for n in names)
+    for s in sco_sites:
+        assert 55 < s["lat"] < 57 and -4.1 < s["lon"] < -2
+        assert s["sessions_up"] == 28
+        assert s["members"] == 2
+        assert s["routes_received"] == 150000
+    # The two Scottish sites are linked (one exchange, two locations).
+    links = payload["links"]
+    sco_links = [l for l in links if l["group"] == "LINX Scotland"]
+    assert len(sco_links) == 1
+    assert len(sco_links[0]["points"]) == 2
 
 
 def test_map_linx_omits_unreachable_exchanges(tmp_path):

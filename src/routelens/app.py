@@ -465,24 +465,34 @@ def create_app(config: dict | None = None) -> Flask:
 
     @app.get("/api/map/linx")
     def api_map_linx():
-        from .uk import LINX_UK_SITES
+        from .uk import LINX_UK_EXCHANGES
 
         sites = []
-        for site in LINX_UK_SITES:
-            summary = _linx_group_summary(site["group"])
-            if summary:
-                sites.append({**site, **summary, "kind": "linx"})
-        return jsonify({"sites": sites})
+        links = []
+        for exchange in LINX_UK_EXCHANGES:
+            summary = _linx_group_summary(exchange["group"])
+            if not summary:
+                continue
+            for site in exchange["sites"]:
+                sites.append({**site, "group": exchange["group"], **summary, "kind": "linx"})
+            if len(exchange["sites"]) > 1:
+                links.append(
+                    {
+                        "group": exchange["group"],
+                        "points": [[s["lat"], s["lon"]] for s in exchange["sites"]],
+                    }
+                )
+        return jsonify({"sites": sites, "links": links})
 
     @app.get("/partials/linx-uk")
     def partial_linx_uk():
-        from .uk import LINX_UK_SITES
+        from .uk import LINX_UK_EXCHANGES
 
         rows = []
-        for site in LINX_UK_SITES:
-            summary = _linx_group_summary(site["group"])
+        for exchange in LINX_UK_EXCHANGES:
+            summary = _linx_group_summary(exchange["group"])
             if summary:
-                rows.append({**site, **summary})
+                rows.append({"city": exchange["city"], **summary})
         return render_template("partials/linx_uk_strip.html", rows=rows)
 
     def _linx_group_summary(group: str) -> dict | None:

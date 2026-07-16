@@ -6,12 +6,37 @@ from __future__ import annotations
 # LINX's five UK peering LANs, keyed by their Alice-LG group names.
 # Scotland listed first deliberately: RouteLens carries a standing brief to
 # give Scotland's Internet infrastructure visible representation.
-LINX_UK_SITES = [
-    {"group": "LINX Scotland", "city": "Edinburgh", "lat": 55.95, "lon": -3.19},
-    {"group": "LINX LON1", "city": "London (Docklands)", "lat": 51.49, "lon": -0.06},
-    {"group": "LINX LON2", "city": "London", "lat": 51.53, "lon": -0.20},
-    {"group": "LINX Manchester", "city": "Manchester", "lat": 53.48, "lon": -2.24},
-    {"group": "LINX Wales", "city": "Cardiff", "lat": 51.48, "lon": -3.18},
+# An exchange can span multiple data centres (`sites`); the map shows one
+# marker per site and links them, while Alice session data is per exchange.
+LINX_UK_EXCHANGES = [
+    {
+        "group": "LINX Scotland",
+        "city": "Edinburgh & Chapelhall",
+        "sites": [
+            {"site": "Pulsant South Gyle, Edinburgh", "lat": 55.94, "lon": -3.31},
+            {"site": "DataVita DV1, Chapelhall", "lat": 55.85, "lon": -3.94},
+        ],
+    },
+    {
+        "group": "LINX LON1",
+        "city": "London (Docklands)",
+        "sites": [{"site": "London Docklands", "lat": 51.49, "lon": -0.06}],
+    },
+    {
+        "group": "LINX LON2",
+        "city": "London",
+        "sites": [{"site": "London", "lat": 51.53, "lon": -0.20}],
+    },
+    {
+        "group": "LINX Manchester",
+        "city": "Manchester",
+        "sites": [{"site": "Manchester", "lat": 53.48, "lon": -2.24}],
+    },
+    {
+        "group": "LINX Wales",
+        "city": "Cardiff",
+        "sites": [{"site": "Cardiff", "lat": 51.48, "lon": -3.18}],
+    },
 ]
 
 UK_OPERATORS = [

@@ -92,3 +92,13 @@ def test_pulse_map_includes_linx_sites_layer(tmp_path):
     assert "ixp-marker" in body
     # The legend distinguishes collectors from exchange sites.
     assert "LINX exchange" in body
+
+
+def test_pulse_map_draws_linx_intersite_links(tmp_path):
+    client = _app(tmp_path).test_client()
+
+    body = client.get("/").data.decode()
+
+    # The collectors layer renders link polylines between multi-site exchanges.
+    assert "linx.links" in body or "links" in body
+    assert "polyline" in body.lower()

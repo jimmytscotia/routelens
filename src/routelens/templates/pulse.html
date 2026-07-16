@@ -217,15 +217,22 @@
             .addTo(group);
           state.markers[c.rrc] = {marker, el, timeout: null};
         }
+        // Inter-site links first, so diamonds render on top of the lines.
+        for (const link of linx.links || []) {
+          L.polyline(link.points, {
+            color: '#3ddc97', weight: 1.5, opacity: 0.6, dashArray: '4 5',
+          }).bindPopup(`${link.group} · one exchange across ${link.points.length} data centres`)
+            .addTo(group);
+        }
         for (const s of linx.sites || []) {
           const el = document.createElement('div');
           el.className = 'ixp-marker';
           const icon = L.divIcon({className: '', html: el, iconSize: [11, 11]});
-          L.marker([s.lat, s.lon], {icon, title: `${s.group} — ${s.city}`})
-            .bindPopup(`${s.group} · ${s.city}<br>` +
+          L.marker([s.lat, s.lon], {icon, title: `${s.group} — ${s.site}`})
+            .bindPopup(`${s.group}<br>${s.site}<br>` +
                        `${s.sessions_up}/${s.sessions} route-server sessions up · ` +
                        `${s.members} members · ${s.routes_received.toLocaleString()} routes held<br>` +
-                       `<span style="color:var(--faint)">route-server snapshot (Alice-LG), not update activity</span>`)
+                       `<span style="color:var(--faint)">exchange-wide route-server snapshot (Alice-LG), not update activity</span>`)
             .addTo(group);
         }
         layers.collectors = group.addTo(map);
