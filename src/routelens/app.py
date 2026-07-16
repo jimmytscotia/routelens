@@ -463,6 +463,56 @@ def create_app(config: dict | None = None) -> Flask:
             return (0, LINX_UK_ORDER.index(group))
         return (1, group)
 
+    @app.get("/partials/explain")
+    def partial_explain():
+        from datetime import datetime, timedelta, timezone
+
+        kind = request.args.get("kind", "")
+        prefix = request.args.get("prefix", "")
+        if kind not in ("origin-change", "flap"):
+            abort(400)
+
+        def snippet(text, muted=False):
+            return render_template("partials/explain.html", text=text, muted=muted)
+
+        # Cost guard: only explain events that actually exist in our recent
+        # data, so arbitrary query params can't drive unbounded model calls.
+        since = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S")
+        context = None
+        if kind == "origin-change":
+            event = next((e for e in store.recent_origin_events(since=since, limit=200)
+                          if e["prefix"] == prefix), None)
+            if event:
+                context = (f"origin change: prefix {event['prefix']} moved origin from "
+                           f"AS{event['old_asn']} to AS{event['new_asn']}, seen {event['flips']} time(s).")
+        else:
+            row = next((f for f in store.prefix_flap_league(since=since, limit=200)
+                        if f["prefix"] == prefix), None)
+            if row:
+                pattern = "announced and withdrawn repeatedly (flapping)" if (
+                    row["announcements"] and row["withdrawals"]) else "re-announced repeatedly (churn)"
+                context = (f"prefix flap: {row['prefix']} was {pattern}, "
+                           f"{row['events']} events, origin AS{row['origin_asn']}.")
+        if context is None:
+            return snippet("This event is no longer in the recent window.", muted=True)
+
+        cache_key = f"explain:{kind}:{prefix}"
+        cached = store.cache_get(cache_key, max_age_seconds=21600)
+        if cached is not None:
+            return snippet(cached)
+
+        from .ai import WeatherAI
+
+        ai = app.config.get("ROUTELENS_AI") or WeatherAI.from_env()
+        if ai is None:
+            return snippet("AI explanations are not configured.", muted=True)
+        try:
+            text = ai.explain(context)
+        except Exception as exc:
+            return snippet(f"Explanation unavailable ({exc}).", muted=True)
+        store.cache_set(cache_key, text)
+        return snippet(text)
+
     @app.get("/dashboards/companies")
     def dashboard_companies():
         return render_template("dashboards/companies.html")

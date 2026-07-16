@@ -7,7 +7,7 @@ def test_registry_shape_and_no_chinese_companies():
         assert isinstance(c["asns"], list)
         assert "status" in c
         if c["status"] is not None:
-            assert c["status"]["type"] in ("statuspage", "gcp")
+            assert c["status"]["type"] in ("statuspage", "gcp", "aws", "apple", "meta", "microsoft")
             assert c["status"]["url"].startswith("https://")
     names = {c["name"] for c in COMPANIES}
     # A few headline names present; nothing from the excluded set.

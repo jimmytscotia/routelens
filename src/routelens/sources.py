@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from typing import Any
 
@@ -27,6 +28,11 @@ RADAR_BASE = "https://api.cloudflare.com/client/v4/radar"
 # Polite User-Agent for bulk/courtesy data sources (bgp.tools requires a
 # reachable contact). The mailbox is monitored by the admin.
 USER_AGENT = "RouteLens/1.0 (https://routelens.nexthop.engineer; noc.nexthop@agentmail.to)"
+
+
+def _utf16_json(response) -> Any:
+    """Decode a UTF-16 JSON body (AWS's currentevents feed is served this way)."""
+    return json.loads(response.content.decode("utf-16"))
 ASN_CSV_URL = "https://bgp.tools/asns.csv"
 
 
@@ -159,6 +165,7 @@ class SourceClient:
         summarize,
         params: dict | None = None,
         headers: dict[str, str] | None = None,
+        decode=None,
     ) -> dict[str, Any]:
         cached = self.store.cache_get(cache_key, max_age_seconds=max_age_seconds)
         if cached is not None:
@@ -168,7 +175,8 @@ class SourceClient:
                 url, params=params, headers=self._headers(headers), timeout=self.timeout
             )
             response.raise_for_status()
-            data = summarize(response.json())
+            payload = decode(response) if decode else response.json()
+            data = summarize(payload)
         except Exception as exc:  # network errors, HTTP errors, bad JSON
             return {"ok": False, "error": str(exc)}
         self.store.cache_set(cache_key, data)
@@ -499,12 +507,57 @@ class SourceClient:
             desc = ongoing[0].get("external_desc") or "Active incident"
             return {"state": "outage", "detail": desc}
 
-        summarizer = {"statuspage": summarize_statuspage, "gcp": summarize_gcp}.get(ftype)
+        def summarize_aws(payload: Any) -> dict[str, Any]:
+            # An event is active while end_time is empty and it isn't marked
+            # [RESOLVED]. AWS's severity codes aren't documented enough to
+            # separate partial from full outage, so any active event is
+            # reported as 'degraded' and the summary carries the specifics.
+            active = [e for e in (payload or []) if not e.get("end_time")
+                      and not (e.get("summary") or "").startswith("[RESOLVED]")]
+            if not active:
+                return {"state": "operational", "detail": "No active events"}
+            return {"state": "degraded", "detail": active[0].get("summary") or "Active event"}
+
+        def summarize_apple(payload: dict) -> dict[str, Any]:
+            outage, degraded = [], []
+            for svc in (payload.get("services") or []):
+                for ev in (svc.get("events") or []):
+                    if ev.get("endDate"):
+                        continue  # resolved
+                    (outage if ev.get("statusType") == "Outage" else degraded).append(svc.get("serviceName"))
+            if outage:
+                return {"state": "outage", "detail": "Outage: " + ", ".join(filter(None, outage[:3]))}
+            if degraded:
+                return {"state": "degraded", "detail": "Issue: " + ", ".join(filter(None, degraded[:3]))}
+            return {"state": "operational", "detail": "All services operational"}
+
+        def summarize_meta(payload: Any) -> dict[str, Any]:
+            items = payload if isinstance(payload, list) else []
+            if not items:
+                return {"state": "operational", "detail": "No active incidents"}
+            return {"state": "outage", "detail": items[0].get("summary") or "Active incident"}
+
+        def summarize_microsoft(payload: Any) -> dict[str, Any]:
+            posts = payload if isinstance(payload, list) else []
+            bad = [p for p in posts if (p.get("Status") or "").lower() not in ("operational", "", "servicerestored")]
+            if not bad:
+                return {"state": "operational", "detail": "All services operational"}
+            p = bad[0]
+            label = p.get("Title") or p.get("ServiceDisplayName") or "Service issue"
+            return {"state": "degraded", "detail": f"{p.get('ServiceDisplayName', '')}: {label}".strip(": ")}
+
+        summarizers = {
+            "statuspage": summarize_statuspage, "gcp": summarize_gcp, "aws": summarize_aws,
+            "apple": summarize_apple, "meta": summarize_meta, "microsoft": summarize_microsoft,
+        }
+        summarizer = summarizers.get(ftype)
         if summarizer is None:
             return {"ok": True, "data": {"state": "unknown", "detail": "feed not yet supported"}}
 
+        # AWS serves its currentevents JSON as UTF-16.
+        decode = _utf16_json if ftype == "aws" else None
         result = self._cached_get(
-            f"status:{ftype}:{url}", url, max_age_seconds=600, summarize=summarizer,
+            f"status:{ftype}:{url}", url, max_age_seconds=600, summarize=summarizer, decode=decode,
         )
         if not result.get("ok"):
             result.setdefault("data", {"state": "unknown", "detail": result.get("error", "unavailable")})

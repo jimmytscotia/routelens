@@ -117,6 +117,15 @@
       font-size:.6875rem;padding:2px 8px;border-radius:999px;border:1px solid var(--line-strong);
       color:var(--muted);white-space:nowrap}
     .badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+    /* AI event explainers */
+    .explain-btn{background:none;border:1px solid var(--line);color:var(--muted);border-radius:var(--r);
+      font:inherit;font-size:.625rem;padding:2px 8px;cursor:pointer}
+    .explain-btn:hover{border-color:var(--accent);color:var(--accent-ink)}
+    .explain-box{background:var(--inset);border:1px solid var(--line);border-radius:var(--r);
+      padding:8px 10px;font-size:.75rem;line-height:1.5;color:var(--ink);margin:2px 0 8px}
+    .explain-box.muted{color:var(--muted)}
+    .explain-tag{font-family:var(--mono);font-size:.5625rem;color:var(--accent-ink);
+      border:1px solid var(--line-strong);border-radius:999px;padding:0 5px;margin-right:6px}
     .badge.healthy,.badge.valid{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 35%,transparent)}
     .badge.warning{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
     .badge.critical,.badge.invalid{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 35%,transparent)}

@@ -679,3 +679,75 @@ def test_companies_partial_renders_status_and_bgp(tmp_path):
     assert "/q?query=AS13335" in body
     # No-feed companies are shown honestly.
     assert "Netflix" in body
+
+
+class _FakeAI:
+    model = "mistral-small-latest"
+
+    def __init__(self):
+        self.calls = 0
+
+    def explain(self, context):
+        self.calls += 1
+        return "Plain-English explanation of the event."
+
+
+def test_explain_origin_change_real_event(tmp_path):
+    app = _app(tmp_path)
+    store = app.config["ROUTELENS_STORE"]
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    store.record_origin_event(observed_at=now, prefix="203.0.113.0/24", old_asn=64500, new_asn=64666)
+    ai = _FakeAI()
+    app.config["ROUTELENS_AI"] = ai
+
+    body = app.test_client().get(
+        "/partials/explain?kind=origin-change&prefix=203.0.113.0/24").data.decode()
+
+    assert "Plain-English explanation" in body
+    assert ai.calls == 1
+
+    # Second call is served from cache — no extra AI call.
+    app.test_client().get("/partials/explain?kind=origin-change&prefix=203.0.113.0/24")
+    assert ai.calls == 1
+
+
+def test_explain_unknown_event_does_not_call_ai(tmp_path):
+    app = _app(tmp_path)
+    ai = _FakeAI()
+    app.config["ROUTELENS_AI"] = ai
+
+    body = app.test_client().get(
+        "/partials/explain?kind=origin-change&prefix=8.8.8.0/24").data.decode()
+
+    assert "recent window" in body.lower() or "no longer" in body.lower()
+    assert ai.calls == 0        # cost guard: only real events reach the model
+
+
+def test_explain_without_ai_configured_degrades(tmp_path, monkeypatch):
+    monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
+    app = _app(tmp_path)
+    store = app.config["ROUTELENS_STORE"]
+    store.record_prefix_bucket(bucket_ts=_hour_bucket(0), prefix="203.0.113.0/24",
+                               announcements=500, withdrawals=400, origin_asn=15169)
+
+    body = app.test_client().get(
+        "/partials/explain?kind=flap&prefix=203.0.113.0/24").data.decode()
+
+    assert "not configured" in body.lower()
+
+
+def test_explain_rejects_bad_kind(tmp_path):
+    app = _app(tmp_path)
+    assert app.test_client().get("/partials/explain?kind=nope&prefix=x").status_code == 400
+
+
+def test_origin_changes_rows_have_explain_buttons(tmp_path):
+    app = _app(tmp_path)
+    store = app.config["ROUTELENS_STORE"]
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    store.record_origin_event(observed_at=now, prefix="203.0.113.0/24", old_asn=64500, new_asn=64666)
+
+    body = app.test_client().get("/partials/dashboards/origin-changes?window=21600").data.decode()
+
+    assert 'class="explain-btn"' in body
+    assert "/partials/explain?kind=origin-change&amp;prefix=203.0.113.0" in body

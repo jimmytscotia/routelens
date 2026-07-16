@@ -89,3 +89,18 @@ def test_summarize_survives_model_wrapping_json_in_prose():
     result = ai.summarize({"internal": {}})
 
     assert result["severity"] == "calm"
+
+
+def test_explain_returns_plain_text():
+    client = FakeClient("This prefix's origin AS changed from AS64500 to AS64666, "
+                        "which could be a planned migration or a leak — check RPKI.")
+    ai = WeatherAI(client)
+
+    out = ai.explain("origin change: 203.0.113.0/24 AS64500 -> AS64666, 2 flips")
+
+    assert "origin AS changed" in out
+    call = client.chat.calls[0]
+    assert call["model"] == "mistral-small-latest"
+    # Explanations are short and don't force the weather JSON schema.
+    assert "response_format" not in call
+    assert call["messages"][1]["content"].startswith("origin change")

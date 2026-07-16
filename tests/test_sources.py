@@ -20,6 +20,12 @@ class FakeResponse:
     def json(self):
         return self._payload
 
+    @property
+    def content(self):
+        # UTF-16 so the AWS decode path is genuinely exercised.
+        import json as _json
+        return _json.dumps(self._payload).encode("utf-16")
+
     def raise_for_status(self):
         if self.status_code >= 400:
             raise sources.requests.HTTPError(f"HTTP {self.status_code}")
@@ -775,3 +781,56 @@ def test_company_status_none_and_error(store, monkeypatch):
     monkeypatch.setattr(sources.requests, "get", boom)
     res = SourceClient(store).company_status({"type": "statuspage", "url": "https://x"})
     assert res["ok"] is False and res["data"]["state"] == "unknown"
+
+
+def test_company_status_aws_severity_and_resolved(store, monkeypatch):
+    active_outage = [
+        {"status": "0", "end_time": "1784204519", "summary": "[RESOLVED] old thing"},
+        {"status": "3", "end_time": None, "summary": "Increased 5xx errors on CloudFront"},
+    ]
+    monkeypatch.setattr(sources.requests, "get",
+                        lambda url, **kw: FakeResponse(active_outage))
+    res = SourceClient(store).company_status({"type": "aws", "url": "https://x"})
+    # Active events read as degraded (severity codes aren't reliably decodable).
+    assert res["data"]["state"] == "degraded"
+    assert "CloudFront" in res["data"]["detail"]
+
+    all_resolved = [{"status": "0", "end_time": "123", "summary": "[RESOLVED] x"}]
+    monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse(all_resolved))
+    assert SourceClient(store).company_status({"type": "aws", "url": "https://y"})["data"]["state"] == "operational"
+
+
+def test_company_status_apple(store, monkeypatch):
+    payload = {"services": [
+        {"serviceName": "iCloud Mail", "events": [
+            {"statusType": "Issue", "endDate": "", "message": "Some users affected"}]},
+        {"serviceName": "App Store", "events": [
+            {"statusType": "Outage", "endDate": "07/13/2026 23:16 PDT", "message": "resolved"}]},
+    ]}
+    monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse(payload))
+    res = SourceClient(store).company_status({"type": "apple", "url": "https://x"})
+    # An active Issue (no endDate) -> degraded; the resolved Outage is ignored.
+    assert res["data"]["state"] == "degraded"
+    assert "iCloud Mail" in res["data"]["detail"]
+
+
+def test_company_status_meta(store, monkeypatch):
+    monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse([]))
+    assert SourceClient(store).company_status({"type": "meta", "url": "https://x"})["data"]["state"] == "operational"
+
+    monkeypatch.setattr(sources.requests, "get",
+                        lambda url, **kw: FakeResponse([{"summary": "Graph API errors"}]))
+    r = SourceClient(store).company_status({"type": "meta", "url": "https://y"})
+    assert r["data"]["state"] == "outage"
+
+
+def test_company_status_microsoft_m365(store, monkeypatch):
+    ok = [{"Status": "Operational", "Title": "", "ServiceDisplayName": "Microsoft 365 (Consumer)"}]
+    monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse(ok))
+    assert SourceClient(store).company_status({"type": "microsoft", "url": "https://x"})["data"]["state"] == "operational"
+
+    bad = [{"Status": "Investigating", "Title": "Cannot send mail", "ServiceDisplayName": "Exchange"}]
+    monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse(bad))
+    r = SourceClient(store).company_status({"type": "microsoft", "url": "https://y"})
+    assert r["data"]["state"] == "degraded"
+    assert "Exchange" in r["data"]["detail"]

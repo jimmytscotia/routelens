@@ -83,6 +83,16 @@ def _import_mistral():
     return Mistral
 
 
+EXPLAIN_SYSTEM = """You are a network engineer explaining a single BGP event \
+to a technical but time-pressed reader, in 2-3 plain sentences. Say what the \
+event means, whether it looks routine (maintenance, traffic engineering, \
+normal multihoming) or worth investigating (possible leak, hijack, or \
+instability), and what a reader could check next (e.g. RPKI validity, the \
+prefix in the looking glass). Ground everything in the values given; never \
+invent ASNs, prefixes, or facts not present. No preamble, no markdown headers \
+— just the explanation."""
+
+
 class WeatherAI:
     def __init__(self, client: Any, model: str = MODEL):
         self._client = client
@@ -94,6 +104,18 @@ class WeatherAI:
         if not key:
             return None
         return cls(_import_mistral()(api_key=key))
+
+    def explain(self, context: str) -> str:
+        """A short plain-English explanation of a single BGP event."""
+        response = self._client.chat.complete(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": EXPLAIN_SYSTEM},
+                {"role": "user", "content": context},
+            ],
+            temperature=0.2,
+        )
+        return (response.choices[0].message.content or "").strip()
 
     def summarize(self, evidence: dict[str, Any]) -> dict[str, Any]:
         response = self._client.chat.complete(
