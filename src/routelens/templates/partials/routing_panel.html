@@ -2,7 +2,16 @@
 {% if routing.ok %}
 {% set d = routing.data %}
 <div class="kv"><span>RIS visibility</span><strong>{{ d.visibility_seeing }} / {{ d.visibility_total }} peers ({{ d.visibility_pct }}%)</strong></div>
-<div class="kv"><span>Origin</span><strong>{% for a in d.origins %}AS{{ a }} {% else %}none{% endfor %}</strong></div>
+<div class="kv"><span>Origin</span><strong>
+  {% for a in d.origins %}
+    <a class="mono" href="/q?query=AS{{ a }}">AS{{ a }}</a>
+    <a class="ext" href="https://stat.ripe.net/AS{{ a }}" target="_blank" rel="noopener"
+       title="Look up AS{{ a }} on RIPEstat (all-RIR registry data)">↗</a>{{ ", " if not loop.last }}
+  {% else %}none{% endfor %}
+</strong></div>
+{% for a in d.origins %}{% if origin_names.get(a) %}
+<div class="kv"><span>{{ "Held by" if loop.first else "" }}</span><strong>{{ origin_names[a].name }}{% if origin_names[a].country %} <span class="mono" style="color:var(--faint)">{{ origin_names[a].country }}</span>{% endif %}</strong></div>
+{% endif %}{% endfor %}
 {% if rpki and rpki.ok %}
 <div class="kv"><span>RPKI</span><strong><span class="badge {{ 'valid' if rpki.data.status == 'valid' else 'invalid' }}">{{ rpki.data.status }}</span> · {{ rpki.data.roa_count }} ROA{{ 's' if rpki.data.roa_count != 1 }}</strong></div>
 {% endif %}

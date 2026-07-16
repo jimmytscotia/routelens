@@ -134,9 +134,12 @@ def create_app(config: dict | None = None) -> Flask:
         prefix = request.args.get("prefix", "")
         routing = sources().ripestat_routing_status(prefix)
         rpki = None
+        origin_names = {}
         if routing["ok"] and routing["data"]["origins"]:
             rpki = sources().ripestat_rpki(routing["data"]["origins"][0], prefix)
-        return render_template("partials/routing_panel.html", routing=routing, rpki=rpki)
+            origin_names = store.asn_names_for(routing["data"]["origins"])
+        return render_template("partials/routing_panel.html", routing=routing, rpki=rpki,
+                               origin_names=origin_names)
 
     @app.get("/partials/prefix/routeviews")
     def partial_prefix_routeviews():

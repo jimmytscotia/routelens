@@ -1,6 +1,10 @@
 <header class="phead"><h2>Observed activity · last 24h</h2><span class="srctag">routelens aggregator</span></header>
 {% if p.name %}<div class="kv"><span>Operator</span><strong>{{ p.name }}</strong></div>{% endif %}
 {% if p.country %}<div class="kv"><span>Registered</span><strong>{{ p.country_name }} ({{ p.country }})</strong></div>{% endif %}
+<div class="kv"><span>Registry lookup</span><strong>
+  <a class="ext" href="https://stat.ripe.net/AS{{ p.asn }}" target="_blank" rel="noopener">RIPEstat ↗</a>
+  · <a class="ext" href="https://bgp.tools/as/{{ p.asn }}" target="_blank" rel="noopener">bgp.tools ↗</a>
+</strong></div>
 <div class="kv"><span title="Prefix announcements originated by this AS, seen across all RIS collectors">Announcements</span><strong>{{ "{:,}".format(p.announcements) }}</strong></div>
 <div class="kv"><span title="Most distinct prefixes touched in a single hour">Peak distinct prefixes</span><strong>{{ "{:,}".format(p.peak_distinct) }}</strong></div>
 <div class="kv"><span title="Announcement paths in which this AS appeared as a transit hop">Transit paths carried</span><strong>{{ "{:,}".format(p.transit_paths) }}</strong></div>

@@ -174,6 +174,27 @@ def test_routing_partial_renders_visibility_and_rpki(client):
     assert "valid" in body.lower()
 
 
+def test_routing_partial_shows_origin_org_and_registry_link(client, app):
+    app.config["ROUTELENS_STORE"].upsert_asn_names([(15169, "Google LLC", "US")])
+
+    body = client.get("/partials/prefix/routing?prefix=8.8.8.0/24").data.decode()
+
+    # Origin org name is shown, and a link to an authoritative registry.
+    assert "Google LLC" in body
+    assert "https://stat.ripe.net/AS15169" in body
+    # The AS also drills into our own profile.
+    assert "/q?query=AS15169" in body
+
+
+def test_asn_summary_has_registry_links(client, app):
+    app.config["ROUTELENS_STORE"].upsert_asn_names([(2856, "British Telecommunications PLC", "GB")])
+
+    body = client.get("/partials/asn/summary?asn=2856").data.decode()
+
+    assert "https://stat.ripe.net/AS2856" in body
+    assert "bgp.tools/as/2856" in body
+
+
 def test_routeviews_partial_renders_collectors(client):
     response = client.get("/partials/prefix/routeviews?prefix=8.8.8.0/24")
     body = response.data.decode()

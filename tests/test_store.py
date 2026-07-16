@@ -379,3 +379,17 @@ def test_asn_announcements_batch(tmp_path):
     assert got[13335] == 200
     assert got[15169] == 40
     assert got[64500] == 0        # no activity -> zero, still present
+
+
+def test_asn_names_for_batch(tmp_path):
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "names.db")
+    store.init_schema()
+    store.upsert_asn_names([(28267, "Example Org Ltd", "BR"), (15169, "Google LLC", "US")])
+
+    got = store.asn_names_for([28267, 15169, 64500])
+
+    assert got[28267] == {"name": "Example Org Ltd", "country": "BR"}
+    assert got[15169]["name"] == "Google LLC"
+    assert 64500 not in got   # unknown ASN simply absent

@@ -427,6 +427,18 @@ class RouteLensStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def asn_names_for(self, asns: list[int]) -> dict[int, dict[str, str]]:
+        """Names/countries for a set of ASNs; unknown ASNs are omitted."""
+        if not asns:
+            return {}
+        placeholders = ",".join("?" for _ in asns)
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"SELECT asn, name, country FROM asn_names WHERE asn IN ({placeholders})",
+                tuple(asns),
+            ).fetchall()
+        return {row["asn"]: {"name": row["name"], "country": row["country"]} for row in rows}
+
     def asn_announcements(self, asns: list[int], *, since: str) -> dict[int, int]:
         """Announced-prefix totals since `since` for a set of ASNs. ASNs with
         no activity are returned as 0 (kept in the result)."""
