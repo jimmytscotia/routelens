@@ -143,11 +143,21 @@ API, no auth — `/api/v1/status`, `/api/v1/routeservers`,
   — NB COLLECTOR.MOM1 is Mombasa, NOT Manchester; earlier note was wrong)
 - `*-center3.linx.net` hosts are LINX Middle East (JED1/RIY1), not UK.
 
-SHIPPED 2026-07-15: /dashboards/linx (exchange cards, Scotland pinned first,
-sessions/members/routes per exchange, 15-min cache) + "LINX view" panel on
-prefix pages (cross-exchange lookup, bilateral-peering caveat). Sidebar gained
-a "United Kingdom" category. Route servers only see RS-peering members —
-absence ≠ not at LINX.
+CURRENT SHAPE (2026-07-16, redesigned with Jim — the earlier /dashboards/linx
+page and "United Kingdom" sidebar category were removed):
+- Collector league: LINX presence via the RIS collector hosted at LINX
+  (rrc01 London — the only UK/LINX RIS collector), tagged from the
+  machine-readable `ixps` field in collectors.py. Alice-LG snapshot data is
+  NEVER merged into the RIS-velocity league — different measures.
+- Pulse map: LINX's five UK LANs as diamond markers via /api/map/linx.
+  LINX Scotland renders as BOTH its data centres (Pulsant South Gyle
+  Edinburgh + DataVita DV1 Chapelhall) with a dashed link — exchanges are
+  a `sites` list in uk.py, so multi-site LANs are a data edit.
+- /q landing: "UK exchanges via LINX route servers" strip, Scotland first.
+- Prefix pages: "LINX view" panel (cross-exchange lookup) unchanged.
+- Route servers only see RS-peering members — absence ≠ not at LINX.
+- STANDING BRIEF from Jim: Scotland keeps a visible, data-backed place on
+  the map and the site — he's promoting Scotland's Internet presence.
 
 ## Publishing status
 
