@@ -65,6 +65,51 @@ COMPANIES = [
 ]
 
 
+# Spike thresholds relative to an operator's own trailing hourly baseline.
+_SPIKE_UNSTABLE = 5.0
+_SPIKE_ELEVATED = 2.0
+
+
+def bgp_stability(store, asns: list[int], *, now=None) -> dict:
+    """A routing-stability read for a set of ASNs, normalised against their
+    OWN baseline so it's comparable across operators of any size. Signals:
+    a spike over the trailing hourly average, prefixes flapping (announce +
+    withdraw cycling) or withdrawing, and origin changes involving the ASNs.
+
+    Returns state in {stable, elevated, unstable} plus the components, so the
+    UI can explain WHY. Raw volume alone is deliberately not a factor."""
+    from datetime import datetime, timedelta, timezone
+
+    now = now or datetime.now(timezone.utc)
+
+    def iso(delta_h):
+        return (now - timedelta(hours=delta_h)).strftime("%Y-%m-%dT%H:%M:%S")
+
+    last_hour = sum(store.asn_announcements(asns, since=iso(1)).values())
+    day_total = sum(store.asn_announcements(asns, since=iso(24)).values())
+    baseline_hourly = (day_total - last_hour) / 23 if day_total > last_hour else 0
+    spike = round(last_hour / baseline_hourly, 1) if baseline_hourly > 0 else 0.0
+
+    flap = store.prefix_flap_for_origins(asns, since=iso(6))
+    flapping = sum(f["flapping"] for f in flap.values())
+    churning = sum(f["churning"] for f in flap.values())
+    withdrawals = sum(f["withdrawals"] for f in flap.values())
+    origin_changes = sum(store.origin_changes_for_asns(asns, since=iso(24)).values())
+
+    if flapping > 0 or origin_changes > 0 or spike >= _SPIKE_UNSTABLE:
+        state = "unstable"
+    elif churning > 0 or spike >= _SPIKE_ELEVATED:
+        state = "elevated"
+    else:
+        state = "stable"
+
+    return {
+        "state": state, "spike": spike, "flapping": flapping, "churning": churning,
+        "withdrawals": withdrawals, "origin_changes": origin_changes,
+        "announcements": day_total,
+    }
+
+
 def build_company_board(store, sources, *, registry=None, since=None):
     """One row per company merging its live status feed with its BGP footprint
     (24h announcements + RPKI coverage of the primary ASN). Status fetches run
@@ -91,6 +136,9 @@ def build_company_board(store, sources, *, registry=None, since=None):
         coverage = (round(100 * score["valid"] / score["total"])
                     if score and score["total"] else None)
         data = status.get("data") or {}
+        stability = bgp_stability(store, company["asns"]) if company["asns"] else {
+            "state": "stable", "spike": 0.0, "flapping": 0, "churning": 0,
+            "withdrawals": 0, "origin_changes": 0, "announcements": 0}
         rows.append({
             "name": company["name"],
             "category": company["category"],
@@ -102,6 +150,7 @@ def build_company_board(store, sources, *, registry=None, since=None):
             "has_feed": company["status"] is not None,
             "announcements": sum(announced.get(a, 0) for a in company["asns"]),
             "rpki_coverage": coverage,
+            "stability": stability,
         })
 
     def group(items):

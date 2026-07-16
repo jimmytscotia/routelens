@@ -679,6 +679,9 @@ def test_companies_partial_renders_status_and_bgp(tmp_path):
     assert "/q?query=AS13335" in body
     # No-feed companies are shown honestly.
     assert "Netflix" in body
+    # BGP stability column present (steady seed -> stable).
+    assert "BGP stability" in body
+    assert "bgp-stable" in body
 
 
 class _FakeAI:

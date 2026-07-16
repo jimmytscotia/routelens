@@ -393,3 +393,43 @@ def test_asn_names_for_batch(tmp_path):
     assert got[28267] == {"name": "Example Org Ltd", "country": "BR"}
     assert got[15169]["name"] == "Google LLC"
     assert 64500 not in got   # unknown ASN simply absent
+
+
+def test_prefix_flap_for_origins(tmp_path):
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "flaporig.db")
+    store.init_schema()
+    # AS15169: one flapping prefix (ann+wdr) and one churning (ann only).
+    store.record_prefix_bucket(bucket_ts="2026-07-16T10:00:00", prefix="203.0.113.0/24",
+                               announcements=40, withdrawals=30, origin_asn=15169)
+    store.record_prefix_bucket(bucket_ts="2026-07-16T11:00:00", prefix="203.0.113.0/24",
+                               announcements=10, withdrawals=5, origin_asn=15169)
+    store.record_prefix_bucket(bucket_ts="2026-07-16T10:00:00", prefix="198.51.100.0/24",
+                               announcements=50, withdrawals=0, origin_asn=15169)
+    store.record_prefix_bucket(bucket_ts="2026-07-16T10:00:00", prefix="192.0.2.0/24",
+                               announcements=9, withdrawals=9, origin_asn=2856)
+
+    got = store.prefix_flap_for_origins([15169, 2856, 64500], since="2026-07-16T00:00:00")
+
+    assert got[15169]["flapping"] == 1        # 203.0.113.0/24
+    assert got[15169]["churning"] == 1        # 198.51.100.0/24
+    assert got[15169]["withdrawals"] == 35
+    assert got[2856]["flapping"] == 1
+    assert 64500 not in got                   # no noisy prefixes
+
+
+def test_origin_changes_for_asns(tmp_path):
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "ocount.db")
+    store.init_schema()
+    store.record_origin_event(observed_at="2026-07-16T10:00:00", prefix="p1", old_asn=15169, new_asn=64666)
+    store.record_origin_event(observed_at="2026-07-16T11:00:00", prefix="p2", old_asn=64500, new_asn=15169)
+    store.record_origin_event(observed_at="2026-07-15T00:00:00", prefix="p3", old_asn=15169, new_asn=1)
+
+    got = store.origin_changes_for_asns([15169, 2856], since="2026-07-16T00:00:00")
+
+    # 15169 involved in two events within the window (as old, then as new).
+    assert got[15169] == 2
+    assert 2856 not in got

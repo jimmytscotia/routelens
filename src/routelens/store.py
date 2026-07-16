@@ -516,6 +516,55 @@ class RouteLensStore:
                 result.append(item)
         return result
 
+    def prefix_flap_for_origins(self, asns: list[int], *, since: str) -> dict[int, dict[str, int]]:
+        """Per origin ASN: how many of its prefixes are flapping (announced AND
+        withdrawn) vs churning (announced only), and total withdrawals — the
+        BGP-side instability signal. Only origins with noisy prefixes appear."""
+        if not asns:
+            return {}
+        placeholders = ",".join("?" for _ in asns)
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT origin_asn,
+                       SUM(CASE WHEN ann > 0 AND wdr > 0 THEN 1 ELSE 0 END) AS flapping,
+                       SUM(CASE WHEN ann > 0 AND wdr = 0 THEN 1 ELSE 0 END) AS churning,
+                       SUM(wdr) AS withdrawals
+                  FROM (
+                    SELECT origin_asn, prefix,
+                           SUM(announcements) AS ann, SUM(withdrawals) AS wdr
+                      FROM ris_prefix_activity
+                     WHERE bucket_ts >= ? AND origin_asn IN ({placeholders})
+                     GROUP BY origin_asn, prefix
+                  )
+                 GROUP BY origin_asn
+                """,
+                (since, *asns),
+            ).fetchall()
+        return {r["origin_asn"]: {"flapping": r["flapping"], "churning": r["churning"],
+                                  "withdrawals": r["withdrawals"]} for r in rows}
+
+    def origin_changes_for_asns(self, asns: list[int], *, since: str) -> dict[int, int]:
+        """Count confirmed origin-change events involving each ASN (as the old
+        or new origin) since `since`."""
+        if not asns:
+            return {}
+        placeholders = ",".join("?" for _ in asns)
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT asn, COUNT(*) AS n FROM (
+                    SELECT old_asn AS asn FROM ris_origin_events
+                     WHERE last_seen >= ? AND old_asn IN ({placeholders})
+                    UNION ALL
+                    SELECT new_asn AS asn FROM ris_origin_events
+                     WHERE last_seen >= ? AND new_asn IN ({placeholders})
+                ) GROUP BY asn
+                """,
+                (since, *asns, since, *asns),
+            ).fetchall()
+        return {r["asn"]: r["n"] for r in rows}
+
     def prune_prefix_activity(self, *, before: str) -> int:
         with self.connect() as conn:
             cur = conn.execute("DELETE FROM ris_prefix_activity WHERE bucket_ts < ?", (before,))

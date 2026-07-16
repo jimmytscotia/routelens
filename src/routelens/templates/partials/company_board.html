@@ -9,7 +9,7 @@
           <th style="width:22%">Service</th>
           <th style="width:30%" title="Reported by the operator's own status page">Status</th>
           <th title="Primary origin AS — click for the looking glass">Origin AS</th>
-          <th class="num" title="Prefixes announced by this operator's networks in the last 24h (RouteLens / RIPE RIS)">BGP announcements (24h)</th>
+          <th title="Routing stability from RouteLens's own BGP data, judged against this operator's OWN baseline (not raw volume): a spike vs its trailing hourly average, its prefixes flapping or withdrawing, or origin changes involving it.">BGP stability</th>
           <th class="num" title="ROA coverage of the primary AS, when RouteLens has scored it">RPKI</th>
         </tr>
       </thead>
@@ -25,7 +25,17 @@
           <td class="mono">
             {% if c.primary_asn %}<a href="/q?query=AS{{ c.primary_asn }}">AS{{ c.primary_asn }}</a>{% else %}—{% endif %}
           </td>
-          <td class="num mono">{{ "{:,}".format(c.announcements) }}</td>
+          <td>
+            {% set s = c.stability %}
+            {% set why = [] %}
+            {% if s.flapping %}{% set _ = why.append(s.flapping ~ ' flapping prefix' ~ ('es' if s.flapping != 1 else '')) %}{% endif %}
+            {% if s.origin_changes %}{% set _ = why.append(s.origin_changes ~ ' origin change' ~ ('s' if s.origin_changes != 1 else '')) %}{% endif %}
+            {% if s.spike >= 2 %}{% set _ = why.append(s.spike ~ '× spike vs baseline') %}{% endif %}
+            {% if s.churning and not s.flapping %}{% set _ = why.append(s.churning ~ ' churning prefix' ~ ('es' if s.churning != 1 else '')) %}{% endif %}
+            <span class="st bgp-{{ s.state }}" title="{{ why|join('; ') if why else 'No anomalies vs baseline' }} · {{ '{:,}'.format(s.announcements) }} announcements/24h">
+              <span class="dot"></span>{{ s.state }}</span>
+            {% if why %}<div class="co-detail">{{ why|join(', ') }}</div>{% endif %}
+          </td>
           <td class="num co-rpki">
             {% if c.rpki_coverage is not none %}
               <span class="badge {{ 'healthy' if c.rpki_coverage >= 95 else ('warning' if c.rpki_coverage >= 50 else 'critical') }}">{{ c.rpki_coverage }}%</span>

@@ -67,3 +67,51 @@ def test_build_company_board_merges_status_and_bgp(tmp_path):
     uk_names = {c["name"] for g in board["uk"] for c in g["companies"]}
     assert "BBC" in uk_names
     assert all(c["name"] != "BBC" for g in board["global"] for c in g["companies"])
+
+
+def test_bgp_stability_states(tmp_path):
+    from routelens.store import RouteLensStore
+    from routelens.companies import bgp_stability
+    from datetime import datetime, timedelta, timezone
+
+    store = RouteLensStore(tmp_path / "stab.db")
+    store.init_schema()
+
+    def hour(h):
+        return (datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+                - timedelta(hours=h)).strftime("%Y-%m-%dT%H:%M:%S")
+
+    # AS100: steady ~100/hr for a day -> stable.
+    for h in range(0, 24):
+        store.record_asn_bucket(bucket_ts=hour(h), asn=100, updates=100, announcements=100)
+    # AS200: flapping prefix in the last 6h -> unstable regardless of volume.
+    store.record_asn_bucket(bucket_ts=hour(0), asn=200, updates=10, announcements=10)
+    store.record_prefix_bucket(bucket_ts=hour(1), prefix="203.0.113.0/24",
+                               announcements=40, withdrawals=40, origin_asn=200)
+    # AS300: a big spike over its own baseline -> unstable (>=5x).
+    for h in range(1, 24):
+        store.record_asn_bucket(bucket_ts=hour(h), asn=300, updates=10, announcements=10)
+    store.record_asn_bucket(bucket_ts=hour(0), asn=300, updates=800, announcements=800)
+
+    stable = bgp_stability(store, [100])
+    assert stable["state"] == "stable"
+
+    unstable_flap = bgp_stability(store, [200])
+    assert unstable_flap["state"] == "unstable"
+    assert unstable_flap["flapping"] == 1
+
+    unstable_spike = bgp_stability(store, [300])
+    assert unstable_spike["state"] == "unstable"
+    assert unstable_spike["spike"] >= 5
+
+
+def test_bgp_stability_quiet_asn_is_stable(tmp_path):
+    from routelens.store import RouteLensStore
+    from routelens.companies import bgp_stability
+
+    store = RouteLensStore(tmp_path / "quiet.db")
+    store.init_schema()
+
+    out = bgp_stability(store, [64500])
+    assert out["state"] == "stable"
+    assert out["announcements"] == 0
