@@ -31,6 +31,22 @@ PRUNE_INTERVAL_S = 3600
 NAMES_REFRESH_S = 86400  # bgp.tools asks for at most daily fetches
 RPKI_REFRESH_S = 3600    # ~20 paced RouteViews calls per hour
 WEATHER_REFRESH_S = 21600  # AI Internet Weather briefing every 6 hours
+WEATHER_WARMUP_S = 900     # ...but the first one on a cold DB fires ~15 min in
+
+
+def _initial_last_weather(store, now: float) -> float:
+    """Seed the weather timer so the cadence survives restarts. If a recent
+    report exists, count from it (a deploy won't lose it or double-generate);
+    if not, fire after WEATHER_WARMUP_S rather than a full 6h — otherwise
+    frequent deploys reset the clock and the feature never populates."""
+    latest = store.latest_weather_report()
+    if latest:
+        try:
+            ts = datetime.strptime(latest["generated_at"], "%Y-%m-%d %H:%M:%S")
+            return ts.replace(tzinfo=timezone.utc).timestamp()
+        except (ValueError, KeyError, TypeError):
+            pass
+    return now - (WEATHER_REFRESH_S - WEATHER_WARMUP_S)
 RETENTION_DAYS = int(os.environ.get("ROUTELENS_RETENTION_DAYS", "7"))
 
 
@@ -280,8 +296,7 @@ async def run(store: RouteLensStore) -> None:
     last_prune = 0.0
     last_names = 0.0
     last_rpki = 0.0
-    # Wait a full period before the first briefing so it has data to describe.
-    last_weather = time.time()
+    last_weather = _initial_last_weather(store, time.time())
     retry_s = 1
 
     while True:

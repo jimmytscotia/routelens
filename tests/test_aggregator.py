@@ -268,3 +268,38 @@ def test_flush_writes_transit_and_path_stats(tmp_path):
     stats = store.path_stats(since="2026-07-14T00:00:00")
     assert stats["paths"] == 2
     assert stats["avg_len"] == 3.0
+
+
+def test_initial_last_weather_cold_db_fires_after_warmup(tmp_path):
+    from routelens.aggregator import _initial_last_weather, WEATHER_REFRESH_S, WEATHER_WARMUP_S
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "w.db")
+    store.init_schema()
+    now = 1_000_000.0
+
+    seed = _initial_last_weather(store, now)
+
+    # First briefing fires WARMUP seconds after start, not a full period.
+    assert now - seed == WEATHER_REFRESH_S - WEATHER_WARMUP_S
+    assert (now - seed) < WEATHER_REFRESH_S
+
+
+def test_initial_last_weather_tracks_last_report(tmp_path):
+    from routelens.aggregator import _initial_last_weather
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "w.db")
+    store.init_schema()
+    store.save_weather_report(period_hours=6, headline="h", severity="calm",
+                              body_md="b", evidence={}, model="m")
+
+    seed = _initial_last_weather(store, 9_999_999_999.0)
+
+    # Seeded from the stored report's timestamp, so the next one fires 6h
+    # after THAT report — not immediately, not a fresh 6h from restart.
+    latest = store.latest_weather_report()
+    from datetime import datetime, timezone
+    expected = datetime.strptime(latest["generated_at"], "%Y-%m-%d %H:%M:%S").replace(
+        tzinfo=timezone.utc).timestamp()
+    assert seed == expected
