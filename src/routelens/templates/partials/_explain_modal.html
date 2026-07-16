@@ -1,0 +1,25 @@
+{# Shared AI-explanation popup. Include once in a dashboard shell; explain
+   buttons target #explain-content and call explainOpen(label). The modal
+   lives outside any live-updating table, so it is unaffected by re-sorts. #}
+<dialog id="explain-modal" class="rl-modal" aria-label="Event explanation">
+  <div class="rl-modal-head">
+    <h2 id="explain-title">Explanation</h2>
+    <button type="button" class="rl-close" aria-label="Close"
+            onclick="this.closest('dialog').close()">&times;</button>
+  </div>
+  <div id="explain-content"><p class="loading">Generating explanation…</p></div>
+</dialog>
+<script>
+  // Open the popup immediately with a placeholder; HTMX swaps the real
+  // explanation into #explain-content when the request returns.
+  function explainOpen(label) {
+    document.getElementById('explain-title').textContent = label;
+    document.getElementById('explain-content').innerHTML =
+      '<p class="loading">Generating explanation…</p>';
+    document.getElementById('explain-modal').showModal();
+  }
+  (function () {
+    const dlg = document.getElementById('explain-modal');
+    dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+  })();
+</script>

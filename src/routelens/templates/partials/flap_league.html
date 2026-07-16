@@ -11,6 +11,7 @@
       <th class="num" title="Announcements + withdrawals — the leaderboard ranking">Events ({{ window_label }})</th>
       <th class="num" title="How many separate hours this prefix was noisy in — sustained vs one burst">Hours</th>
       <th title="flapping = announce AND withdraw cycling (reachability bouncing). churn = re-announcements only (path/attribute changes, reachability stable).">Pattern</th>
+      <th></th>
     </tr>
   </thead>
   <tbody data-live="prefix">
@@ -30,6 +31,10 @@
           {% else %}
             <span class="badge unknown" title="Re-announcements only: the path or attributes keep changing but reachability holds. Often traffic engineering or an unstable-but-redundant upstream.">churn</span>
           {% endif %}</td>
+      <td><button class="explain-btn" type="button" title="Explain this flap in plain English"
+            hx-get="/partials/explain?kind=flap&amp;prefix={{ row.prefix|urlencode }}"
+            hx-target="#explain-content" hx-swap="innerHTML"
+            onclick="explainOpen('{{ row.prefix }}')">explain</button></td>
     </tr>
   {% endfor %}
   </tbody>

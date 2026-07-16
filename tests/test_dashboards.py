@@ -796,3 +796,35 @@ def test_company_board_attributes_status_and_labels_routing(tmp_path):
     assert "Reported status" in body
     assert "Routing signal (BGP)" in body
     assert "not a measure of service availability" in body
+
+
+def test_flap_rows_have_explain_buttons_and_page_has_dialog(tmp_path):
+    app = _app(tmp_path)
+    store = app.config["ROUTELENS_STORE"]
+    store.record_prefix_bucket(bucket_ts=_hour_bucket(0), prefix="203.0.113.0/24",
+                               announcements=500, withdrawals=400, origin_asn=15169)
+    client = app.test_client()
+
+    partial = client.get("/partials/dashboards/flaps?window=21600").data.decode()
+    assert 'class="explain-btn"' in partial
+    assert "/partials/explain?kind=flap&amp;prefix=203.0.113.0" in partial
+    assert 'hx-target="#explain-content"' in partial
+
+    # The shared popup dialog is on the flaps page shell.
+    page = client.get("/dashboards/flaps").data.decode()
+    assert '<dialog id="explain-modal"' in page
+    assert "function explainOpen" in page
+
+
+def test_explain_flap_real_event(tmp_path):
+    app = _app(tmp_path)
+    store = app.config["ROUTELENS_STORE"]
+    store.record_prefix_bucket(bucket_ts=_hour_bucket(0), prefix="203.0.113.0/24",
+                               announcements=500, withdrawals=400, origin_asn=15169)
+    ai = _FakeAI()
+    app.config["ROUTELENS_AI"] = ai
+
+    body = app.test_client().get("/partials/explain?kind=flap&prefix=203.0.113.0/24").data.decode()
+
+    assert "Plain-English explanation" in body
+    assert ai.calls == 1
