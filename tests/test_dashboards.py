@@ -679,8 +679,8 @@ def test_companies_partial_renders_status_and_bgp(tmp_path):
     assert "/q?query=AS13335" in body
     # No-feed companies are shown honestly.
     assert "Netflix" in body
-    # BGP stability column present (steady seed -> stable).
-    assert "BGP stability" in body
+    # Routing-signal column present (steady seed -> stable).
+    assert "Routing signal (BGP)" in body
     assert "bgp-stable" in body
 
 
@@ -764,3 +764,35 @@ def test_origin_changes_page_has_explain_dialog(tmp_path):
 
     assert '<dialog id="explain-modal"' in body
     assert 'id="explain-content"' in body
+
+
+def test_about_page_has_disclaimer(tmp_path):
+    body = _app(tmp_path).test_client().get("/about").data.decode()
+
+    for phrase in ["not affiliated", "not a measure of service availability",
+                   "as is", "Corrections", "not legal advice",
+                   "trademarks of their respective owners"]:
+        assert phrase in body, phrase
+
+
+def test_footer_disclaimer_on_every_page(tmp_path):
+    client = _app(tmp_path).test_client()
+    for path in ("/", "/dashboards/collectors", "/q"):
+        body = client.get(path).data.decode()
+        assert "not affiliated with, endorsed by" in body, path
+        assert 'href="/about"' in body, path
+
+
+def test_company_board_attributes_status_and_labels_routing(tmp_path):
+    app = _app(tmp_path)
+
+    class FakeSources:
+        def company_status(self, feed):
+            return {"ok": True, "data": {"state": "operational", "detail": "ok"}}
+
+    app.config["ROUTELENS_SOURCES"] = FakeSources()
+    body = app.test_client().get("/partials/dashboards/companies").data.decode()
+
+    assert "Reported status" in body
+    assert "Routing signal (BGP)" in body
+    assert "not a measure of service availability" in body

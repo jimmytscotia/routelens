@@ -68,6 +68,10 @@ def create_app(config: dict | None = None) -> Flask:
     def sources() -> SourceClient:
         return app.config["ROUTELENS_SOURCES"]
 
+    @app.get("/about")
+    def about():
+        return render_template("about.html")
+
     @app.get("/healthz")
     def healthz():
         return jsonify({"status": "ok", "service": "routelens"})

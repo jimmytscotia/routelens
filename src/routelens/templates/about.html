@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}About &amp; data · RouteLens{% endblock %}
+{% block body %}
+<main class="wrap">
+  <div class="pagehead">
+    <h1>About &amp; data</h1>
+    <p>RouteLens is a live network-observability tool for a technical audience investigating the
+       state of the Internet's core routing.</p>
+  </div>
+
+  <article class="prose panel">
+    <h2>About the data</h2>
+    <p>RouteLens aggregates publicly available network data for informational and educational
+       purposes. It is an independent project and is <strong>not affiliated with, endorsed by, or
+       sponsored by</strong> any company, network, or organisation referenced on it. All company and
+       product names are trademarks of their respective owners and are used for identification only.</p>
+
+    <h2>Service status</h2>
+    <p>The status shown on the <a href="/dashboards/companies">Service health</a> page is taken directly
+       from each operator's own public status page (for example their Statuspage, Google Cloud, AWS,
+       Apple or Meta status feed), as published by that operator and captured at the time shown.
+       RouteLens does not independently test these services and does not assert that any service is,
+       or is not, available.</p>
+
+    <h2>Routing signals</h2>
+    <p>Routing signals — “routing stability”, origin changes, prefix flaps, announcement counts and the
+       live activity feeds — are derived from public Border Gateway Protocol (BGP) data (RIPE RIS and
+       similar) using the methods described on each page. <strong>BGP routing behaviour is not a measure
+       of a service's availability</strong>: a network can show routing activity while its services are
+       fully operational, and a service can fail while its routing is perfectly stable. These signals
+       are observations, not statements of fact about any operator's service quality.</p>
+
+    <h2>Accuracy &amp; warranty</h2>
+    <p>Data is aggregated automatically, cached, and may be incomplete, delayed, or inaccurate. It is
+       provided <strong>“as is” and “as available”, without warranties of any kind</strong>, express or
+       implied, including as to accuracy, completeness, or fitness for any purpose. Nothing here is
+       advice; do not rely on it for operational or commercial decisions.</p>
+
+    <h2>Corrections</h2>
+    <p>If you represent an organisation shown here and believe something is inaccurate, please contact
+       <a href="mailto:noc.nexthop@agentmail.to">noc.nexthop@agentmail.to</a> and we will review it
+       promptly.</p>
+
+    <h2>Sources &amp; attribution</h2>
+    <ul>
+      <li>Routing data via RIPE NCC (RIS &amp; RIPEstat), RouteViews, NLNOG Ring, bgp.tools and PeeringDB.</li>
+      <li>Outage and hijack data from IODA and GRIP (Georgia Tech) — used with attribution.</li>
+      <li>Some data © Cloudflare, Inc. (Cloudflare Radar), used under CC BY-NC 4.0.</li>
+      <li>Reachability measurements via Globalping.</li>
+    </ul>
+
+    <p class="attribution">RouteLens is provided from the United Kingdom. This notice is not legal advice.</p>
+  </article>
+</main>
+<style>
+  .prose{max-width:80ch;line-height:1.6}
+  .prose h2{font-size:.9375rem;margin:18px 0 6px}
+  .prose h2:first-child{margin-top:0}
+  .prose p{margin:0 0 10px;color:var(--ink)}
+  .prose ul{margin:0 0 10px;padding-left:18px} .prose li{margin-bottom:4px}
+  .prose a{color:var(--accent-ink)}
+</style>
+{% endblock %}

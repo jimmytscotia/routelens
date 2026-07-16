@@ -154,6 +154,8 @@
     footer.site{border-top:1px solid var(--line);color:var(--faint);font-size:.75rem;
       padding:14px 0 22px;margin-top:26px}
     footer.site .wrap{display:flex;flex-wrap:wrap;gap:6px 18px}
+    footer.site .disclaimer{flex-basis:100%;margin:0 0 6px;max-width:78ch;line-height:1.5}
+    footer.site a{color:var(--muted)} footer.site a:hover{color:var(--accent-ink)}
 
     @media (max-width: 760px){
       .navin{flex-wrap:wrap;height:auto;padding:8px 0;gap:8px}
@@ -194,8 +196,13 @@
     <div class="content">{% block body %}{% endblock %}</div>
   </div>
   <footer class="site"><div class="wrap">
-    <span>NextHop Lab</span>
-    <span>Data: RIPE RIS &amp; RIPEstat · RouteViews · NLNOG Ring · Globalping · Cloudflare Radar (CC BY-NC 4.0)</span>
+    <p class="disclaimer">RouteLens is an independent, non-commercial tool that aggregates publicly
+      available data. It is not affiliated with, endorsed by, or connected to any organisation named on it.
+      Service-status information reflects each operator's own public status page; routing signals are
+      observations from public BGP data and are not a measure of service availability. Provided “as is”,
+      without warranty — see <a href="/about">About &amp; data</a>.</p>
+    <span>NextHop Lab · <a href="/about">About &amp; data</a></span>
+    <span>Data: RIPE RIS &amp; RIPEstat · RouteViews · NLNOG Ring · Globalping · Cloudflare Radar (CC BY-NC 4.0) · IODA &amp; GRIP (Georgia Tech) · bgp.tools · PeeringDB</span>
   </div></footer>
 </body>
 </html>

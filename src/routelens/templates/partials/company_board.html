@@ -7,9 +7,9 @@
       <thead>
         <tr>
           <th style="width:22%">Service</th>
-          <th style="width:30%" title="Reported by the operator's own status page">Status</th>
+          <th style="width:30%" title="As published by each operator's own public status page at the time shown. RouteLens does not independently test these services.">Reported status</th>
           <th title="Primary origin AS — click for the looking glass">Origin AS</th>
-          <th title="Routing stability from RouteLens's own BGP data, judged against this operator's OWN baseline (not raw volume): a spike vs its trailing hourly average, its prefixes flapping or withdrawing, or origin changes involving it.">BGP stability</th>
+          <th title="A ROUTING observation from RouteLens's own public BGP data — NOT a measure of service availability. Judged against this operator's own baseline (not raw volume): a spike vs its trailing hourly average, its prefixes flapping or withdrawing, or origin changes involving it.">Routing signal (BGP)</th>
           <th class="num" title="ROA coverage of the primary AS, when RouteLens has scored it">RPKI</th>
         </tr>
       </thead>
@@ -57,7 +57,9 @@
 {{ company_table(board.uk) }}
 {% endif %}
 
-<p class="attribution">Status from each operator's public status page (Statuspage / Google Cloud feeds;
-   others show BGP only until their adapter lands). BGP announcements and RPKI from RouteLens / RIPE RIS
-   and RouteViews. Status ≠ reachability: a green status page can coexist with a routing problem, and
-   vice-versa — that's why both signals are shown.</p>
+<p class="attribution"><strong>Reported status</strong> is taken directly from each operator's own public
+   status page, as published by them — RouteLens does not independently test these services.
+   <strong>Routing signal</strong> is a RouteLens observation from public BGP data (RIPE RIS / RouteViews)
+   and is <strong>not a measure of service availability</strong>: a service can be down while its routing is
+   stable, and vice-versa. Names are trademarks of their respective owners, used for identification only.
+   See <a href="/about">About &amp; data</a>.</p>
