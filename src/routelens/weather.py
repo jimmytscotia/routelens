@@ -187,6 +187,77 @@ def generate_weather_report(store: RouteLensStore, sources: Any, ai: Any) -> dic
     return report
 
 
+def build_view(evidence: dict[str, Any]) -> dict[str, Any]:
+    """Turn a stored report's evidence JSON into render-ready structures for
+    the visual Weather page: stat tiles, scaled bars, merged outages, and a
+    map payload. Pure — all numbers come straight from the evidence."""
+    from .countries import country_name, flag_emoji
+
+    internal = evidence.get("internal") or {}
+    hotspots_raw = internal.get("country_hotspots") or []
+    churners_raw = internal.get("top_churners") or []
+    flaps_raw = internal.get("flap_leaders") or []
+    spikes = internal.get("collector_spikes") or []
+    origin = internal.get("origin_changes") or {"count": 0, "recent": []}
+    grip = evidence.get("grip") or []
+
+    # Merge IODA country alerts + Radar outages into one per-country list.
+    outages: dict[str, dict] = {}
+    asn_alerts = 0
+    for alert in evidence.get("ioda") or []:
+        if alert.get("entity_type") == "country" and alert.get("entity_code"):
+            cc = alert["entity_code"]
+            entry = outages.setdefault(cc, {"country": cc, "name": country_name(cc),
+                                            "flag": flag_emoji(cc), "sources": [], "causes": []})
+            if "IODA" not in entry["sources"]:
+                entry["sources"].append("IODA")
+        elif alert.get("entity_type") == "asn":
+            asn_alerts += 1
+    for out in evidence.get("radar_outages") or []:
+        for cc in out.get("locations") or []:
+            entry = outages.setdefault(cc, {"country": cc, "name": country_name(cc),
+                                            "flag": flag_emoji(cc), "sources": [], "causes": []})
+            if "Cloudflare Radar" not in entry["sources"]:
+                entry["sources"].append("Cloudflare Radar")
+            if out.get("cause") and out["cause"] not in entry["causes"]:
+                entry["causes"].append(out["cause"])
+
+    peak_intensity = max((h.get("intensity", 0) for h in hotspots_raw), default=0)
+    hotspots = [
+        {"country": h["country"], "name": country_name(h["country"]), "flag": flag_emoji(h["country"]),
+         "intensity": h.get("intensity", 0), "announcements": h.get("announcements", 0),
+         "origins": h.get("origins", 0),
+         "bar": round(100 * h.get("intensity", 0) / peak_intensity) if peak_intensity else 0}
+        for h in hotspots_raw
+    ]
+
+    peak_churn = max((c.get("announcements", 0) for c in churners_raw), default=0)
+    churners = [
+        {**c, "bar": round(100 * c.get("announcements", 0) / peak_churn) if peak_churn else 0}
+        for c in churners_raw
+    ]
+
+    return {
+        "stats": {
+            "hotspots": len(hotspots_raw),
+            "outages": len(outages),
+            "hijacks": len(grip),
+            "origin_changes": origin.get("count", 0),
+            "max_spike": max((s.get("ratio", 0) for s in spikes), default=0),
+        },
+        "hotspots": hotspots,
+        "outages": list(outages.values()),
+        "asn_alerts": asn_alerts,
+        "hijacks": grip,
+        "origin_changes": origin.get("recent") or [],
+        "churners": churners,
+        "flaps": flaps_raw,
+        "spikes": spikes,
+        "map": {"hotspots": [h["country"] for h in hotspots_raw],
+                "outages": list(outages.keys())},
+    }
+
+
 def main() -> int:
     """Generate one briefing now. For on-demand runs / verification:
     `ROUTELENS_DATABASE=... python -m routelens.weather`."""

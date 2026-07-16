@@ -583,3 +583,42 @@ def test_map_outages_merges_ioda_and_radar_by_country(tmp_path):
     assert "POWER_OUTAGE" in sd["causes"]
     # ASN-scoped IODA alerts don't get a map ring (no location), but are counted.
     assert payload["asn_alert_count"] == 1
+
+
+def test_weather_page_renders_visual_evidence(tmp_path):
+    app = _app(tmp_path)
+    store = app.config["ROUTELENS_STORE"]
+    store.save_weather_report(
+        period_hours=6, headline="Squall over Sudan", severity="minor",
+        body_md="## Summary\nSee below.",
+        evidence={
+            "internal": {
+                "collector_spikes": [{"rrc": "rrc01", "last_hour": 5000, "hourly_baseline": 500, "ratio": 10.0}],
+                "country_hotspots": [{"country": "SD", "intensity": 9000, "announcements": 9000, "origins": 1}],
+                "top_churners": [{"asn": 15169, "name": "Google LLC", "announcements": 800}],
+                "flap_leaders": [{"prefix": "203.0.113.0/24", "events": 900, "origin_asn": 15169, "flapping": True}],
+                "origin_changes": {"count": 1, "recent": [
+                    {"prefix": "198.51.100.0/24", "old_asn": 64500, "new_asn": 64666, "flips": 2, "last_seen": "x"}]},
+            },
+            "ioda": [{"entity_type": "country", "entity_code": "AF", "entity_name": "Afghanistan",
+                      "datasource": "merit-nt", "level": "critical", "value": 10, "history": 55}],
+            "grip": [{"id": "g1", "suspicion": 85, "label": "suspicious", "attackers": ["64666"],
+                      "victims": ["64500"], "explanation": "hijack-y"}],
+            "radar_outages": [],
+        },
+        model="mistral-small-latest",
+    )
+    body = app.test_client().get("/dashboards/weather").data.decode()
+
+    # Stat tiles, hero severity, and section anchors.
+    assert 'class="wx-tile"' in body and "churn hotspots" in body
+    assert 'id="wx-hotspots"' in body and 'id="wx-hijacks"' in body
+    # Data-driven map payload + hotspot bar.
+    assert 'id="wx-map"' in body and "/static/world.geojson" in body
+    assert 'class="hbar' in body
+    # Drill-down links to existing looking-glass pages.
+    assert "/q?query=AS15169" in body            # churner
+    assert "/q?query=AS64666" in body            # hijack attacker + origin change
+    assert "/q?query=203.0.113.0/24" in body     # flap leader
+    # Flag rendered for the hotspot country.
+    assert "🇸🇩" in body

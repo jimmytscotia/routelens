@@ -1,29 +1,163 @@
 {% extends "dashboards/_layout.html" %}
 {% block title %}Internet Weather · RouteLens{% endblock %}
+{% block extra_head %}
+{% if view %}
+<link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+{% endif %}
+{% endblock %}
 {% block dashboard %}
   <div class="pagehead" style="padding-top:0">
     <h1>Internet Weather</h1>
     <p>A plain-English briefing on the live state of the Internet's core routing, written every
        six hours by correlating RouteLens's own BGP observations with global outage and hijack
-       feeds. Every claim is grounded in the evidence shown below the report.</p>
+       feeds — with the underlying data below to drill into.</p>
   </div>
   {% if report %}
-  <section class="panel weather-report">
-    <header class="phead">
-      <h2>{{ report.headline }}</h2>
+  {# ---- hero: severity + headline + stat tiles ---- #}
+  <section class="panel wx-hero">
+    <div class="wx-headline">
       <span class="sev-badge sev-{{ report.severity }}">{{ report.severity }}</span>
-    </header>
+      <h2>{{ report.headline }}</h2>
+    </div>
+    <div class="wx-tiles">
+      <a class="wx-tile" href="#wx-hotspots"><b>{{ view.stats.hotspots }}</b><span>churn hotspots</span></a>
+      <a class="wx-tile" href="#wx-outages"><b>{{ view.stats.outages }}</b><span>country outages</span></a>
+      <a class="wx-tile" href="#wx-hijacks"><b>{{ view.stats.hijacks }}</b><span>hijack candidates</span></a>
+      <a class="wx-tile" href="#wx-origins"><b>{{ view.stats.origin_changes }}</b><span>origin changes</span></a>
+      <a class="wx-tile" href="#wx-spikes"><b>{{ view.stats.max_spike }}&times;</b><span>biggest collector spike</span></a>
+    </div>
+  </section>
+
+  {# ---- data-driven hotspot / outage map ---- #}
+  {% if view.map.hotspots or view.map.outages %}
+  <section class="panel">
+    <header class="phead"><h2>Where it's happening</h2>
+      <span class="srctag">churn hotspots &amp; detected outages</span></header>
+    <div id="wx-map" data-map='{{ {"hotspots": view.hotspots, "outages": view.outages} | tojson }}'></div>
+    <div id="wx-map-legend" class="wx-legend">
+      <span class="sw" style="background:#f0c249"></span>churn hotspot
+      <span class="sw" style="background:#ff5d6e;border-radius:50%"></span>detected outage
+    </div>
+  </section>
+  {% endif %}
+
+  {# ---- AI narrative ---- #}
+  <section class="panel weather-report">
+    <header class="phead"><h2>Forecaster's take</h2>
+      <span class="srctag">{{ report.model }} · {{ report.generated_at[:16] }} UTC</span></header>
     <div class="weather-body">{{ body_html|safe }}</div>
     <p class="attribution">
-      Generated {{ report.generated_at }} UTC by {{ report.model }} over the prior {{ report.period_hours }}h.
-      Outage/hijack data: <strong>IODA</strong> (Georgia Tech), <strong>GRIP</strong> (Georgia Tech),
-      <strong>Cloudflare Radar</strong> (CC BY-NC 4.0). BGP observations: RouteLens / RIPE RIS.
-      AI-written — verify before acting.
+      AI-written from the evidence below — verify before acting. Outage/hijack data:
+      <strong>IODA</strong> (Georgia Tech), <strong>GRIP</strong> (Georgia Tech),
+      <strong>Cloudflare Radar</strong> (CC BY-NC 4.0). BGP: RouteLens / RIPE RIS.
     </p>
   </section>
 
+  {# ---- evidence panels ---- #}
+  <div class="panelgrid">
+    {% if view.hotspots %}
+    <section class="panel" id="wx-hotspots">
+      <header class="phead"><h2>Country churn hotspots</h2><span class="srctag">RIPE RIS · 6h</span></header>
+      <table class="datatable"><tbody>
+        {% for h in view.hotspots %}
+        <tr>
+          <td><span class="flag">{{ h.flag }}</span>{{ h.name }}</td>
+          <td class="barcell"><span class="hbar"><i style="width:{{ h.bar }}%"></i></span></td>
+          <td class="num mono" title="announcements per active origin">{{ "{:,}".format(h.intensity) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody></table>
+    </section>
+    {% endif %}
+
+    {% if view.outages %}
+    <section class="panel" id="wx-outages">
+      <header class="phead"><h2>Detected outages</h2><span class="srctag">IODA · Radar</span></header>
+      <table class="datatable"><tbody>
+        {% for o in view.outages %}
+        <tr>
+          <td><span class="flag">{{ o.flag }}</span>{{ o.name }}</td>
+          <td>{% for c in o.causes %}<span class="badge unknown">{{ c|replace('_',' ')|lower }}</span> {% endfor %}</td>
+          <td class="mono src">{{ o.sources|join(' + ') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody></table>
+      {% if view.asn_alerts %}<p class="attribution">+ {{ view.asn_alerts }} ASN-level IODA alert{{ 's' if view.asn_alerts != 1 }} (not country-scoped).</p>{% endif %}
+    </section>
+    {% endif %}
+
+    {% if view.hijacks %}
+    <section class="panel" id="wx-hijacks">
+      <header class="phead"><h2>Hijack candidates</h2><span class="srctag">GRIP · MOAS</span></header>
+      <table class="datatable"><tbody>
+        {% for g in view.hijacks %}
+        <tr>
+          <td class="wx-hij">
+            {% for a in g.attackers %}<a class="mono" href="/q?query=AS{{ a }}">AS{{ a }}</a>{% endfor %}
+            <span class="arrow" aria-hidden="true">→</span>
+            {% for v in g.victims %}<a class="mono" href="/q?query=AS{{ v }}">AS{{ v }}</a>{% endfor %}
+            {% if g.explanation %}<div class="expl">{{ g.explanation }}</div>{% endif %}
+          </td>
+          <td class="barcell"><span class="hbar risk"><i style="width:{{ g.suspicion or 0 }}%"></i></span></td>
+          <td class="num mono" title="GRIP suspicion score">{{ g.suspicion or 0 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody></table>
+    </section>
+    {% endif %}
+
+    {% if view.origin_changes %}
+    <section class="panel" id="wx-origins">
+      <header class="phead"><h2>Origin changes</h2><span class="srctag">RouteLens · confirmed</span></header>
+      <table class="datatable"><tbody>
+        {% for e in view.origin_changes %}
+        <tr>
+          <td class="mono"><a href="/q?query={{ e.prefix|urlencode }}">{{ e.prefix }}</a></td>
+          <td class="mono"><a href="/q?query=AS{{ e.old_asn }}">AS{{ e.old_asn }}</a>
+            <span class="arrow" aria-hidden="true">→</span>
+            <a href="/q?query=AS{{ e.new_asn }}">AS{{ e.new_asn }}</a></td>
+          <td class="num mono">{{ e.flips }}&times;</td>
+        </tr>
+        {% endfor %}
+      </tbody></table>
+    </section>
+    {% endif %}
+
+    {% if view.churners %}
+    <section class="panel">
+      <header class="phead"><h2>Top churning networks</h2><span class="srctag">RIPE RIS · 1h</span></header>
+      <table class="datatable"><tbody>
+        {% for c in view.churners %}
+        <tr>
+          <td class="mono"><a href="/q?query=AS{{ c.asn }}">AS{{ c.asn }}</a></td>
+          <td>{{ c.name or '—' }}</td>
+          <td class="barcell"><span class="hbar"><i style="width:{{ c.bar }}%"></i></span></td>
+          <td class="num mono">{{ "{:,}".format(c.announcements) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody></table>
+    </section>
+    {% endif %}
+
+    {% if view.flaps %}
+    <section class="panel" id="wx-spikes">
+      <header class="phead"><h2>Flapping prefixes</h2><span class="srctag">RIPE RIS · 6h</span></header>
+      <table class="datatable"><tbody>
+        {% for f in view.flaps %}
+        <tr>
+          <td class="mono"><a href="/q?query={{ f.prefix|urlencode }}">{{ f.prefix }}</a></td>
+          <td>{% if f.flapping %}<span class="badge critical">flapping</span>{% else %}<span class="badge unknown">churn</span>{% endif %}</td>
+          <td class="num mono">{{ "{:,}".format(f.events) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody></table>
+    </section>
+    {% endif %}
+  </div>
+
   <details class="panel">
-    <summary>Evidence this briefing was based on</summary>
+    <summary>Raw evidence (JSON)</summary>
     <pre class="evidence mono">{{ report.evidence | tojson(indent=2) }}</pre>
   </details>
 
@@ -32,11 +166,9 @@
     <header class="phead"><h2>Recent briefings</h2></header>
     <ul class="weather-history">
       {% for h in history %}
-      <li>
-        <span class="sev-dot sev-{{ h.severity }}" aria-hidden="true"></span>
+      <li><span class="sev-dot sev-{{ h.severity }}"></span>
         <span class="mono when">{{ h.generated_at[:16] }}</span>
-        <span class="hl">{{ h.headline }}</span>
-      </li>
+        <span class="hl">{{ h.headline }}</span></li>
       {% endfor %}
     </ul>
   </section>
@@ -46,20 +178,41 @@
     <div class="empty">
       <strong>No briefing yet.</strong>
       <p>The first Internet Weather report is written a few hours after the aggregator starts,
-         then every six hours. Data sources: IODA, GRIP, Cloudflare Radar, and RouteLens's own
-         RIPE RIS observations.</p>
+         then every six hours. Sources: IODA, GRIP, Cloudflare Radar, and RouteLens's own RIPE RIS.</p>
     </div>
   </section>
   {% endif %}
+
 <style>
+  .wx-hero{display:flex;flex-direction:column;gap:14px}
+  .wx-headline{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  .wx-headline h2{margin:0;font-size:1.125rem}
   .sev-badge{font-family:var(--mono);font-size:.625rem;text-transform:uppercase;letter-spacing:.06em;
-    border:1px solid var(--line-strong);border-radius:999px;padding:2px 9px}
+    border:1px solid var(--line-strong);border-radius:999px;padding:2px 9px;flex:none}
   .sev-badge.sev-calm{color:var(--ok)} .sev-badge.sev-minor,.sev-badge.sev-notable{color:var(--warn)}
   .sev-badge.sev-severe{color:var(--crit)}
-  .weather-body{line-height:1.6;max-width:64ch}
+  .wx-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+  .wx-tile{background:var(--inset);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;
+    display:block;color:var(--muted)}
+  .wx-tile:hover{border-color:var(--accent);text-decoration:none}
+  .wx-tile b{display:block;font-family:var(--mono);font-size:1.375rem;color:var(--ink);line-height:1.1}
+  .wx-tile span{font-size:.6875rem}
+  #wx-map{height:300px;border-radius:var(--r);border:1px solid var(--line);background:var(--inset)}
+  .wx-legend{font-family:var(--mono);font-size:.625rem;color:var(--muted);margin-top:6px}
+  .wx-legend .sw{display:inline-block;width:10px;height:10px;vertical-align:-1px;margin:0 3px 0 10px}
+  .weather-body{line-height:1.6;max-width:66ch}
   .weather-body h3{font-size:.9375rem;margin:14px 0 4px} .weather-body h4{font-size:.8125rem;margin:12px 0 4px}
   .weather-body p{margin:0 0 10px} .weather-body ul{margin:0 0 10px;padding-left:18px}
   .weather-body code{font-family:var(--mono);font-size:.8125rem;background:var(--inset);padding:1px 4px;border-radius:3px}
+  .flag{font-size:1rem;margin-right:6px}
+  .barcell{width:130px}
+  .hbar{display:inline-block;width:120px;height:8px;background:var(--inset);border:1px solid var(--line);
+    border-radius:999px;overflow:hidden;vertical-align:middle}
+  .hbar i{display:block;height:100%;background:var(--accent)}
+  .hbar.risk i{background:var(--crit)}
+  .wx-hij .arrow,.arrow{color:var(--faint);padding:0 4px}
+  .wx-hij .expl{color:var(--muted);font-size:.6875rem;margin-top:2px}
+  .src{color:var(--muted);font-size:.6875rem}
   .evidence{max-height:340px;overflow:auto;font-size:.6875rem;color:var(--muted);white-space:pre-wrap}
   details.panel summary{cursor:pointer;color:var(--muted);font-size:.8125rem}
   .weather-history{list-style:none;margin:0;padding:0;font-size:.8125rem}
@@ -68,5 +221,42 @@
   .sev-dot{width:8px;height:8px;border-radius:50%;background:var(--faint);flex:none}
   .sev-dot.sev-calm{background:var(--ok)} .sev-dot.sev-minor,.sev-dot.sev-notable{background:var(--warn)}
   .sev-dot.sev-severe{background:var(--crit)}
+  .leaflet-container{background:var(--inset)}
+  .leaflet-control-attribution{background:rgba(11,14,19,.75)!important;color:var(--faint)!important;font-size:.5625rem}
+  .wx-hotdot{border-radius:50%;background:#f0c249;border:1px solid #ffe9a8}
+  .wx-outring{border-radius:50%;background:rgba(255,93,110,.5);border:2px solid #ff5d6e}
 </style>
+{% if view %}
+<script>
+(function () {
+  const el = document.getElementById('wx-map');
+  if (!el) return;
+  const data = JSON.parse(el.dataset.map);
+  function draw() {
+    if (typeof L === 'undefined') { el.innerHTML = '<p class="err" style="padding:12px">Map unavailable (Leaflet blocked).</p>'; return; }
+    const map = L.map('wx-map', {center: [25, 10], zoom: 1.5, minZoom: 1, maxZoom: 6, zoomSnap: 0.5, worldCopyJump: true});
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}@2x.png',
+      {subdomains: 'abcd', attribution: '&copy; OpenStreetMap &copy; CARTO'}).addTo(map);
+    fetch('/static/world.geojson').then(r => r.json()).then(geo => {
+      const cen = {};
+      for (const f of geo.features) cen[f.properties.iso2] = L.geoJSON(f).getBounds().getCenter();
+      const peak = Math.max(1, ...data.hotspots.map(h => h.intensity || 0));
+      for (const h of data.hotspots) {
+        const at = cen[h.country]; if (!at) continue;
+        const r = 4 + 8 * Math.sqrt((h.intensity || 0) / peak);
+        L.circleMarker(at, {radius: r, color: '#f0c249', weight: 1, fillOpacity: 0.55})
+          .bindPopup(`${h.name}<br>intensity ${(h.intensity||0).toLocaleString()}/origin`).addTo(map);
+      }
+      for (const o of data.outages) {
+        const at = cen[o.country]; if (!at) continue;
+        L.circleMarker(at, {radius: 9, color: '#ff5d6e', weight: 2, fillOpacity: 0.35})
+          .bindPopup(`${o.name} — outage<br>${(o.sources||[]).join(' + ')}`).addTo(map);
+      }
+    });
+  }
+  if (document.readyState === 'complete' && typeof L !== 'undefined') draw();
+  else window.addEventListener('load', draw);
+})();
+</script>
+{% endif %}
 {% endblock %}

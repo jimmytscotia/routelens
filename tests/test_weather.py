@@ -220,3 +220,66 @@ def test_generate_weather_report_clamps_bad_severity(tmp_path):
     # An out-of-vocabulary severity from the model is clamped to 'notable'.
     assert report["severity"] == "notable"
     assert store.latest_weather_report()["severity"] == "notable"
+
+
+def test_build_view_shapes_evidence_for_rendering():
+    from routelens.weather import build_view
+
+    evidence = {
+        "internal": {
+            "collector_spikes": [{"rrc": "rrc01", "last_hour": 5000, "hourly_baseline": 500, "ratio": 10.0}],
+            "country_hotspots": [
+                {"country": "SD", "intensity": 9000, "announcements": 9000, "origins": 1},
+                {"country": "BH", "intensity": 3000, "announcements": 6000, "origins": 2},
+            ],
+            "top_churners": [{"asn": 15169, "name": "Google LLC", "announcements": 800}],
+            "flap_leaders": [{"prefix": "203.0.113.0/24", "events": 900, "origin_asn": 15169, "flapping": True}],
+            "origin_changes": {"count": 1, "recent": [
+                {"prefix": "198.51.100.0/24", "old_asn": 64500, "new_asn": 64666, "flips": 2, "last_seen": "x"}]},
+        },
+        "ioda": [
+            {"entity_type": "country", "entity_code": "AF", "entity_name": "Afghanistan",
+             "datasource": "merit-nt", "level": "critical", "value": 10, "history": 55},
+        ],
+        "grip": [
+            {"id": "moas-x", "suspicion": 85, "label": "suspicious", "confidence": 90,
+             "attackers": ["64666"], "victims": ["64500"], "explanation": "hijack-y", "time": 1},
+        ],
+        "radar_outages": [
+            {"id": "o1", "locations": ["AF"], "cause": "POWER_OUTAGE", "scope": "NATIONWIDE",
+             "description": "outage", "asns": [], "start": "x", "end": None},
+        ],
+    }
+
+    view = build_view(evidence)
+
+    assert view["stats"]["hotspots"] == 2
+    assert view["stats"]["outages"] == 1        # AF from IODA + Radar merged to one country
+    assert view["stats"]["hijacks"] == 1
+    assert view["stats"]["origin_changes"] == 1
+    assert view["stats"]["max_spike"] == 10.0
+
+    # Hotspots: flag + name + a 0-100 bar scaled to the max intensity.
+    top = view["hotspots"][0]
+    assert top["country"] == "SD" and top["name"] == "Sudan" and top["flag"]
+    assert top["bar"] == 100
+    assert view["hotspots"][1]["bar"] == 33   # 3000/9000
+
+    # Outages merge IODA + Radar by country with cause + sources.
+    af = view["outages"][0]
+    assert af["country"] == "AF" and af["name"] == "Afghanistan"
+    assert "IODA" in af["sources"] and "Cloudflare Radar" in af["sources"]
+    assert "POWER_OUTAGE" in af["causes"]
+
+    # Map payload lists affected countries by kind.
+    assert set(view["map"]["hotspots"]) == {"SD", "BH"}
+    assert view["map"]["outages"] == ["AF"]
+
+
+def test_build_view_handles_empty_evidence():
+    from routelens.weather import build_view
+
+    view = build_view({"internal": {}, "ioda": [], "grip": [], "radar_outages": []})
+
+    assert view["stats"] == {"hotspots": 0, "outages": 0, "hijacks": 0, "origin_changes": 0, "max_spike": 0}
+    assert view["hotspots"] == [] and view["outages"] == [] and view["map"]["hotspots"] == []
