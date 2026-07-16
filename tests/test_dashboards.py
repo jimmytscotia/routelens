@@ -622,3 +622,24 @@ def test_weather_page_renders_visual_evidence(tmp_path):
     assert "/q?query=203.0.113.0/24" in body     # flap leader
     # Flag rendered for the hotspot country.
     assert "🇸🇩" in body
+
+
+def test_weather_narrative_is_in_a_modal_and_tables_are_constrained(tmp_path):
+    app = _app(tmp_path)
+    store = app.config["ROUTELENS_STORE"]
+    store.save_weather_report(
+        period_hours=6, headline="H", severity="minor", body_md="Watch **AS15169**.",
+        evidence={"internal": {"top_churners": [{"asn": 15169, "name": "X", "announcements": 5}]},
+                  "ioda": [], "grip": [], "radar_outages": []},
+        model="m",
+    )
+    body = app.test_client().get("/dashboards/weather").data.decode()
+
+    # Narrative lives in a click-to-open dialog, opened by a button.
+    assert '<dialog id="wx-briefing"' in body
+    assert 'class="wx-open"' in body and "showModal()" in body
+    # The narrative (with its linkified entity) is inside the dialog markup.
+    assert 'query=AS15169' in body
+    # Evidence tables are constrained so long content can't overflow the panel.
+    assert "wx-evidence" in body
+    assert "table-layout:fixed" in body

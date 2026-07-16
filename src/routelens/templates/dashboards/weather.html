@@ -27,6 +27,11 @@
       <a class="wx-tile" href="#wx-origins"><b>{{ view.stats.origin_changes }}</b><span>origin changes</span></a>
       <a class="wx-tile" href="#wx-spikes"><b>{{ view.stats.max_spike }}&times;</b><span>biggest collector spike</span></a>
     </div>
+    <div class="wx-actions">
+      <button type="button" class="wx-open" onclick="document.getElementById('wx-briefing').showModal()">
+        Read full briefing</button>
+      <span class="wx-meta">{{ report.model }} · {{ report.generated_at[:16] }} UTC</span>
+    </div>
   </section>
 
   {# ---- data-driven hotspot / outage map ---- #}
@@ -42,20 +47,26 @@
   </section>
   {% endif %}
 
-  {# ---- AI narrative ---- #}
-  <section class="panel weather-report">
-    <header class="phead"><h2>Forecaster's take</h2>
-      <span class="srctag">{{ report.model }} · {{ report.generated_at[:16] }} UTC</span></header>
+  {# ---- AI narrative, in a click-to-open modal so the data leads ---- #}
+  <dialog id="wx-briefing" class="wx-modal" aria-label="Full Internet Weather briefing">
+    <div class="wx-modal-head">
+      <div class="wx-headline">
+        <span class="sev-badge sev-{{ report.severity }}">{{ report.severity }}</span>
+        <h2>Forecaster's take</h2>
+      </div>
+      <button type="button" class="wx-close" aria-label="Close briefing"
+              onclick="this.closest('dialog').close()">&times;</button>
+    </div>
     <div class="weather-body">{{ body_html|safe }}</div>
     <p class="attribution">
-      AI-written from the evidence below — verify before acting. Outage/hijack data:
+      AI-written from the evidence on the page — verify before acting. Outage/hijack data:
       <strong>IODA</strong> (Georgia Tech), <strong>GRIP</strong> (Georgia Tech),
       <strong>Cloudflare Radar</strong> (CC BY-NC 4.0). BGP: RouteLens / RIPE RIS.
     </p>
-  </section>
+  </dialog>
 
   {# ---- evidence panels ---- #}
-  <div class="panelgrid">
+  <div class="panelgrid wx-evidence">
     {% if view.hotspots %}
     <section class="panel" id="wx-hotspots">
       <header class="phead"><h2>Country churn hotspots</h2><span class="srctag">RIPE RIS · 6h</span></header>
@@ -200,24 +211,43 @@
   #wx-map{height:300px;border-radius:var(--r);border:1px solid var(--line);background:var(--inset)}
   .wx-legend{font-family:var(--mono);font-size:.625rem;color:var(--muted);margin-top:6px}
   .wx-legend .sw{display:inline-block;width:10px;height:10px;vertical-align:-1px;margin:0 3px 0 10px}
-  .weather-body{line-height:1.65;max-width:68ch;color:var(--ink);font-size:.9375rem}
-  .weather-body>p:first-child{font-size:1.0625rem;line-height:1.55;color:var(--ink);margin-bottom:14px}
-  .weather-body h3{font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);
-    margin:18px 0 6px;font-weight:600} .weather-body h4{font-size:.8125rem;margin:12px 0 4px}
+  /* One body size throughout; the only differentiation is a small muted
+     section label. Keeps the briefing calm and consistent. */
+  .weather-body{font-size:.875rem;line-height:1.65;color:var(--ink)}
+  .weather-body h3,.weather-body h4{font-size:.6875rem;text-transform:uppercase;letter-spacing:.07em;
+    color:var(--muted);font-weight:600;margin:16px 0 6px}
   .weather-body p{margin:0 0 11px} .weather-body ul{margin:0 0 11px;padding-left:0;list-style:none}
-  .weather-body li{padding:4px 0 4px 16px;border-left:1px solid var(--line-strong);margin-bottom:2px}
-  .weather-body code{font-family:var(--mono);font-size:.8125rem;background:var(--inset);padding:1px 4px;border-radius:3px}
+  .weather-body li{padding:4px 0 4px 12px;border-left:1px solid var(--line-strong);margin-bottom:2px}
+  .weather-body code{font-family:var(--mono);font-size:.9em;background:var(--inset);padding:1px 4px;border-radius:3px}
   .weather-body strong{color:var(--ink);font-weight:600}
   /* Entities the forecaster names are clickable, monospace, and stand out
      as data references within the prose. */
-  a.wx-ent{font-family:var(--mono);font-size:.875em;color:var(--accent-ink);
+  a.wx-ent{font-family:var(--mono);font-size:.9em;color:var(--accent-ink);
     background:color-mix(in srgb,var(--accent) 9%,transparent);padding:0 4px;border-radius:3px;
     white-space:nowrap;text-decoration:none}
   a.wx-ent:hover{background:color-mix(in srgb,var(--accent) 20%,transparent);text-decoration:none}
+  /* action button + modal */
+  .wx-actions{display:flex;align-items:center;gap:12px}
+  .wx-open{background:var(--inset);border:1px solid var(--line-strong);color:var(--ink);
+    border-radius:var(--r);padding:6px 13px;font:inherit;font-size:.8125rem;cursor:pointer}
+  .wx-open:hover{border-color:var(--accent);color:var(--accent-ink)}
+  .wx-meta{font-family:var(--mono);font-size:.6875rem;color:var(--faint)}
+  .wx-modal{background:var(--surface);color:var(--ink);border:1px solid var(--line-strong);
+    border-radius:var(--r);max-width:620px;width:calc(100% - 32px);padding:20px 22px}
+  .wx-modal::backdrop{background:rgba(4,6,10,.6)}
+  .wx-modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
+  .wx-modal-head h2{margin:0;font-size:1rem}
+  .wx-close{background:none;border:0;color:var(--muted);font-size:1.35rem;line-height:1;cursor:pointer;padding:0}
+  .wx-close:hover{color:var(--ink)}
   .flag{font-size:1rem;margin-right:6px}
-  .barcell{width:130px}
-  .hbar{display:inline-block;width:120px;height:8px;background:var(--inset);border:1px solid var(--line);
-    border-radius:999px;overflow:hidden;vertical-align:middle}
+  /* Evidence tables: fixed layout so long operator names and un-breakable
+     v6 prefixes wrap inside the panel instead of overflowing it. */
+  .wx-evidence .datatable{table-layout:fixed;width:100%}
+  .wx-evidence .datatable td{overflow-wrap:anywhere}
+  .wx-evidence .barcell{width:88px}
+  .wx-evidence .num{width:72px}
+  .hbar{display:block;width:100%;height:8px;background:var(--inset);border:1px solid var(--line);
+    border-radius:999px;overflow:hidden}
   .hbar i{display:block;height:100%;background:var(--accent)}
   .hbar.risk i{background:var(--crit)}
   .wx-hij .arrow,.arrow{color:var(--faint);padding:0 4px}
@@ -266,6 +296,10 @@
   }
   if (document.readyState === 'complete' && typeof L !== 'undefined') draw();
   else window.addEventListener('load', draw);
+
+  // Click the dimmed backdrop to close the briefing modal (ESC works natively).
+  const dlg = document.getElementById('wx-briefing');
+  if (dlg) dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
 })();
 </script>
 {% endif %}
