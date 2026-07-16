@@ -1,0 +1,125 @@
+from datetime import datetime, timedelta, timezone
+
+from routelens.store import RouteLensStore
+from routelens.weather import detect_anomalies
+
+
+def _minute(minutes_ago: int) -> str:
+    dt = datetime.now(timezone.utc).replace(second=0, microsecond=0) - timedelta(minutes=minutes_ago)
+    return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _hour(hours_ago: int) -> str:
+    dt = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) - timedelta(hours=hours_ago)
+    return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _seeded_store(tmp_path) -> RouteLensStore:
+    store = RouteLensStore(tmp_path / "weather.db")
+    store.init_schema()
+    return store
+
+
+def test_collector_spike_detected_against_trailing_baseline(tmp_path):
+    store = _seeded_store(tmp_path)
+    # Baseline: rrc01 does ~60 updates/hour for 6 prior hours.
+    for hours_ago in range(2, 8):
+        for m in range(0, 60, 10):
+            store.record_activity_bucket(
+                bucket_ts=_minute(hours_ago * 60 + m), rrc="rrc01",
+                updates=10, announcements=9, withdrawals=1,
+            )
+    # Last hour: 40x surge.
+    for m in range(0, 60, 10):
+        store.record_activity_bucket(
+            bucket_ts=_minute(m), rrc="rrc01",
+            updates=400, announcements=380, withdrawals=20,
+        )
+    # A steady collector for contrast.
+    for hours_ago in range(0, 8):
+        store.record_activity_bucket(
+            bucket_ts=_minute(hours_ago * 60 + 5), rrc="rrc12",
+            updates=50, announcements=45, withdrawals=5,
+        )
+
+    anomalies = detect_anomalies(store)
+
+    spikes = anomalies["collector_spikes"]
+    assert [s["rrc"] for s in spikes] == ["rrc01"]
+    assert spikes[0]["last_hour"] == 2400
+    assert spikes[0]["ratio"] >= 10
+
+
+def test_no_spikes_when_activity_is_flat(tmp_path):
+    store = _seeded_store(tmp_path)
+    for hours_ago in range(0, 8):
+        store.record_activity_bucket(
+            bucket_ts=_minute(hours_ago * 60 + 5), rrc="rrc01",
+            updates=50, announcements=45, withdrawals=5,
+        )
+
+    anomalies = detect_anomalies(store)
+
+    assert anomalies["collector_spikes"] == []
+
+
+def test_country_hotspots_flag_intensity_outliers(tmp_path):
+    store = _seeded_store(tmp_path)
+    names = [(i, f"Net {i}", cc) for i, cc in enumerate(["BR"] * 5 + ["US"] * 5 + ["SD"], start=1)]
+    store.upsert_asn_names(names)
+    # Ordinary churn: BR and US origins do modest announcing.
+    for asn in range(1, 11):
+        store.record_asn_bucket(bucket_ts=_hour(0), asn=asn, updates=100, announcements=100)
+    # Sudan: one origin announcing wildly (intensity outlier).
+    store.record_asn_bucket(bucket_ts=_hour(0), asn=11, updates=9000, announcements=9000)
+
+    anomalies = detect_anomalies(store)
+
+    hotspots = anomalies["country_hotspots"]
+    assert [h["country"] for h in hotspots] == ["SD"]
+    assert hotspots[0]["intensity"] == 9000
+
+
+def test_flap_leaders_and_origin_changes_included(tmp_path):
+    store = _seeded_store(tmp_path)
+    store.upsert_asn_names([(15169, "Google LLC", "US")])
+    store.record_prefix_bucket(
+        bucket_ts=_hour(0), prefix="203.0.113.0/24",
+        announcements=500, withdrawals=400, origin_asn=15169,
+    )
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    store.record_origin_event(observed_at=now, prefix="198.51.100.0/24", old_asn=64500, new_asn=64666)
+
+    anomalies = detect_anomalies(store)
+
+    assert anomalies["flap_leaders"][0]["prefix"] == "203.0.113.0/24"
+    assert anomalies["flap_leaders"][0]["flapping"] is True
+    assert anomalies["origin_changes"]["count"] == 1
+    assert anomalies["origin_changes"]["recent"][0]["prefix"] == "198.51.100.0/24"
+
+
+def test_weather_report_store_roundtrip(tmp_path):
+    store = _seeded_store(tmp_path)
+
+    report_id = store.save_weather_report(
+        period_hours=6,
+        headline="Quiet seas with a squall over Sudan",
+        severity="minor",
+        body_md="## Summary\nMostly calm...",
+        evidence={"ioda": 2, "spikes": ["rrc01"]},
+        model="mistral-small-latest",
+    )
+    store.save_weather_report(
+        period_hours=6, headline="Second report", severity="calm",
+        body_md="calm", evidence={}, model="mistral-small-latest",
+    )
+
+    latest = store.latest_weather_report()
+    assert latest["headline"] == "Second report"
+    assert latest["severity"] == "calm"
+
+    reports = store.list_weather_reports(limit=10)
+    assert len(reports) == 2
+    first = next(r for r in reports if r["id"] == report_id)
+    assert first["evidence"]["spikes"] == ["rrc01"]
+    assert first["generated_at"]

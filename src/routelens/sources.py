@@ -16,6 +16,11 @@ PEERINGDB_BASE = "https://www.peeringdb.com/api"
 # (LON1, LON2, Manchester, Scotland, Wales) live here; the separate
 # alice-collector host carries LINX's global collectors instead.
 LINX_RS_BASE = "https://alice-rs.linx.net/api/v1"
+# Outage/hijack feeds for the Internet Weather briefing. IODA and GRIP are
+# Georgia Tech research services: free with attribution, academic/educational
+# AUP — poll politely, cache aggressively, always credit them in the UI.
+IODA_BASE = "https://api.ioda.inetintel.cc.gatech.edu/v2"
+GRIP_BASE = "https://api.grip.inetintel.cc.gatech.edu/v1"
 GLOBALPING_BASE = "https://api.globalping.io/v1"
 RADAR_BASE = "https://api.cloudflare.com/client/v4/radar"
 
@@ -467,6 +472,111 @@ class SourceClient:
             f"{LINX_RS_BASE}/lookup/prefix",
             params={"q": prefix},
             max_age_seconds=600,
+            summarize=summarize,
+        )
+
+    # ---- Outage & hijack feeds (Internet Weather) ---------------------------
+
+    def ioda_alerts(self, *, window_s: int = 21600) -> dict[str, Any]:
+        """IODA outage alerts for the trailing window. Keeps 'critical' level
+        only — 'normal' alerts are recovery/return-to-baseline signals."""
+        import time as _time
+
+        now = int(_time.time())
+
+        def summarize(payload: dict) -> dict[str, Any]:
+            alerts = []
+            for alert in payload.get("data") or []:
+                if alert.get("level") != "critical":
+                    continue
+                entity = alert.get("entity") or {}
+                alerts.append(
+                    {
+                        "entity_type": entity.get("type"),
+                        "entity_code": entity.get("code"),
+                        "entity_name": entity.get("name"),
+                        "datasource": alert.get("datasource"),
+                        "level": alert.get("level"),
+                        "time": alert.get("time"),
+                        "value": alert.get("value"),
+                        "history": alert.get("historyValue"),
+                    }
+                )
+            return {"alerts": alerts}
+
+        # Cache key rounds to 10 minutes so repeat renders share one fetch.
+        bucket = now // 600
+        return self._cached_get(
+            f"ioda:alerts:{window_s}:{bucket}",
+            f"{IODA_BASE}/outages/alerts",
+            params={"from": now - window_s, "until": now},
+            max_age_seconds=600,
+            summarize=summarize,
+        )
+
+    def grip_events(self, *, event_type: str = "moas", limit: int = 20) -> dict[str, Any]:
+        """Recent GRIP BGP-hijack-candidate events with their built-in
+        suspicion inference."""
+
+        def summarize(payload: dict) -> dict[str, Any]:
+            events = []
+            for event in payload.get("data") or []:
+                summary = event.get("summary") or {}
+                inference = ((summary.get("inference_result") or {}).get("primary_inference")) or {}
+                events.append(
+                    {
+                        "id": event.get("id"),
+                        "event_type": event.get("event_type"),
+                        "time": event.get("view_ts"),
+                        "ases": summary.get("ases") or [],
+                        "attackers": summary.get("attackers") or [],
+                        "victims": summary.get("victims") or [],
+                        "suspicion": inference.get("suspicion_level"),
+                        "confidence": inference.get("confidence"),
+                        "label": (inference.get("labels") or [None])[0],
+                        "explanation": inference.get("explanation") or "",
+                    }
+                )
+            return {"events": events}
+
+        return self._cached_get(
+            f"grip:events:{event_type}",
+            f"{GRIP_BASE}/json/events",
+            params={"length": limit, "event_type": event_type},
+            max_age_seconds=600,
+            summarize=summarize,
+        )
+
+    def radar_outages(self) -> dict[str, Any]:
+        """Cloudflare Radar Outage Center annotations (token-gated)."""
+        token = os.environ.get("CLOUDFLARE_RADAR_TOKEN")
+        if not token:
+            return {"ok": False, "unconfigured": True, "error": "CLOUDFLARE_RADAR_TOKEN not set"}
+
+        def summarize(payload: dict) -> dict[str, Any]:
+            outages = []
+            for ann in (payload.get("result") or {}).get("annotations") or []:
+                outage = ann.get("outage") or {}
+                outages.append(
+                    {
+                        "id": ann.get("id"),
+                        "description": ann.get("description"),
+                        "start": ann.get("startDate"),
+                        "end": ann.get("endDate"),
+                        "locations": ann.get("locations") or [],
+                        "asns": ann.get("asns") or [],
+                        "cause": outage.get("outageCause"),
+                        "scope": outage.get("outageType"),
+                    }
+                )
+            return {"outages": outages}
+
+        return self._cached_get(
+            "radar:outages",
+            f"{RADAR_BASE}/annotations/outages",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"limit": 25},
+            max_age_seconds=900,
             summarize=summarize,
         )
 

@@ -88,6 +88,17 @@ CREATE TABLE IF NOT EXISTS address_space (
   scanned_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS weather_reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  generated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  period_hours INTEGER NOT NULL,
+  headline TEXT NOT NULL,
+  severity TEXT NOT NULL,            -- calm | minor | notable | severe
+  body_md TEXT NOT NULL,
+  evidence_json TEXT NOT NULL DEFAULT '{}',
+  model TEXT NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS rpki_scores (
   asn INTEGER PRIMARY KEY,
   total INTEGER NOT NULL,
@@ -628,6 +639,40 @@ class RouteLensStore:
                 (limit,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def save_weather_report(
+        self, *, period_hours: int, headline: str, severity: str,
+        body_md: str, evidence: dict[str, Any], model: str,
+    ) -> int:
+        with self.connect() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO weather_reports(period_hours, headline, severity, body_md, evidence_json, model)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (period_hours, headline, severity, body_md, json.dumps(evidence, sort_keys=True), model),
+            )
+            return int(cur.lastrowid)
+
+    def latest_weather_report(self) -> dict[str, Any] | None:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM weather_reports ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        return self._weather_dict(row) if row else None
+
+    def list_weather_reports(self, *, limit: int = 20) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM weather_reports ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [self._weather_dict(row) for row in rows]
+
+    @staticmethod
+    def _weather_dict(row: sqlite3.Row) -> dict[str, Any]:
+        item = dict(row)
+        item["evidence"] = json.loads(item.pop("evidence_json") or "{}")
+        return item
 
     def upsert_rpki_score(self, *, asn: int, total: int, valid: int, invalid: int, notfound: int) -> None:
         with self.connect() as conn:

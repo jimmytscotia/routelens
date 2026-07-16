@@ -573,3 +573,147 @@ def test_linx_lookup_empty_is_ok_not_error(store, monkeypatch):
 
     assert result["ok"] is True
     assert result["data"]["exchanges"] == []
+
+
+IODA_PAYLOAD = {
+    "data": [
+        {
+            "datasource": "bgp",
+            "entity": {"code": "200899", "name": "AS200899 (INTERSPACE-EUROPE)", "type": "asn",
+                       "attrs": {"org": "INTERSPACE DOOEL Skopje", "ip_count": "7168"}},
+            "time": 1784176200, "level": "critical", "condition": "< 0.99",
+            "value": 28, "historyValue": 36, "method": "median",
+        },
+        {
+            "datasource": "merit-nt",
+            "entity": {"code": "SD", "name": "Sudan", "type": "country", "attrs": {}},
+            "time": 1784176800, "level": "critical", "condition": "< 0.99",
+            "value": 10, "historyValue": 55, "method": "median",
+        },
+        {
+            "datasource": "bgp",
+            "entity": {"code": "GB", "name": "United Kingdom", "type": "country", "attrs": {}},
+            "time": 1784176900, "level": "normal", "condition": ">= 0.99",
+            "value": 100, "historyValue": 100, "method": "median",
+        },
+    ]
+}
+
+
+def test_ioda_alerts_keeps_critical_only_and_caches(store, monkeypatch):
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        return FakeResponse(IODA_PAYLOAD)
+
+    monkeypatch.setattr(sources.requests, "get", fake_get)
+    client = SourceClient(store)
+
+    result = client.ioda_alerts()
+
+    assert result["ok"] is True
+    alerts = result["data"]["alerts"]
+    # 'normal' level alerts are recovery signals, not outages: dropped.
+    assert len(alerts) == 2
+    sudan = next(a for a in alerts if a["entity_code"] == "SD")
+    assert sudan["entity_type"] == "country"
+    assert sudan["entity_name"] == "Sudan"
+    assert sudan["datasource"] == "merit-nt"
+    assert sudan["level"] == "critical"
+    # Drop ratio conveys severity: value vs historical baseline.
+    assert sudan["value"] == 10 and sudan["history"] == 55
+
+    client.ioda_alerts()
+    assert len(calls) == 1  # cached
+
+
+GRIP_PAYLOAD = {
+    "data": [
+        {
+            "id": "moas-1784195700-393636_394233",
+            "event_type": "moas",
+            "view_ts": 1784195700,
+            "summary": {
+                "ases": ["393636", "394233"],
+                "attackers": ["394233"],
+                "victims": ["393636"],
+                "inference_result": {
+                    "primary_inference": {
+                        "confidence": 92,
+                        "explanation": "all newcomers are providers",
+                        "labels": ["legitimate"],
+                        "suspicion_level": 10,
+                    }
+                },
+            },
+        },
+        {
+            "id": "moas-1784195800-64500_64666",
+            "event_type": "moas",
+            "view_ts": 1784195800,
+            "summary": {
+                "ases": ["64500", "64666"],
+                "attackers": ["64666"],
+                "victims": ["64500"],
+                "inference_result": {
+                    "primary_inference": {
+                        "confidence": 80,
+                        "explanation": "newcomer announces victim prefix",
+                        "labels": ["suspicious"],
+                        "suspicion_level": 80,
+                    }
+                },
+            },
+        },
+    ]
+}
+
+
+def test_grip_events_summarises_with_suspicion(store, monkeypatch):
+    monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse(GRIP_PAYLOAD))
+    client = SourceClient(store)
+
+    result = client.grip_events()
+
+    assert result["ok"] is True
+    events = result["data"]["events"]
+    assert len(events) == 2
+    sus = events[1]
+    assert sus["id"] == "moas-1784195800-64500_64666"
+    assert sus["suspicion"] == 80
+    assert sus["label"] == "suspicious"
+    assert sus["attackers"] == ["64666"]
+    assert sus["victims"] == ["64500"]
+    assert "newcomer" in sus["explanation"]
+
+
+def test_radar_outages_token_gated(store, monkeypatch):
+    monkeypatch.delenv("CLOUDFLARE_RADAR_TOKEN", raising=False)
+    client = SourceClient(store)
+    assert client.radar_outages()["unconfigured"] is True
+
+    monkeypatch.setenv("CLOUDFLARE_RADAR_TOKEN", "test-token")
+    payload = {
+        "success": True,
+        "result": {
+            "annotations": [
+                {
+                    "id": "out-1", "dataSource": "ALL", "eventType": "OUTAGE",
+                    "startDate": "2026-07-16T08:00:00Z", "endDate": None,
+                    "description": "Nationwide outage in Sudan",
+                    "locations": ["SD"], "asns": [36998],
+                    "outage": {"outageCause": "POWER_OUTAGE", "outageType": "NATIONWIDE"},
+                }
+            ]
+        },
+    }
+    monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse(payload))
+
+    result = client.radar_outages()
+
+    assert result["ok"] is True
+    out = result["data"]["outages"][0]
+    assert out["locations"] == ["SD"]
+    assert out["cause"] == "POWER_OUTAGE"
+    assert out["scope"] == "NATIONWIDE"
