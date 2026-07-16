@@ -19,7 +19,9 @@ LINX_RS_BASE = "https://alice-rs.linx.net/api/v1"
 GLOBALPING_BASE = "https://api.globalping.io/v1"
 RADAR_BASE = "https://api.cloudflare.com/client/v4/radar"
 
-USER_AGENT = "RouteLens/0.2 (NextHop Lab demo; jim-tobin@outlook.com)"
+# Polite User-Agent for bulk/courtesy data sources (bgp.tools requires a
+# reachable contact). The mailbox is monitored by the admin.
+USER_AGENT = "RouteLens/1.0 (https://routelens.nexthop.engineer; noc.nexthope@agentmail.to)"
 ASN_CSV_URL = "https://bgp.tools/asns.csv"
 
 
