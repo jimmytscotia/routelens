@@ -200,10 +200,20 @@
   #wx-map{height:300px;border-radius:var(--r);border:1px solid var(--line);background:var(--inset)}
   .wx-legend{font-family:var(--mono);font-size:.625rem;color:var(--muted);margin-top:6px}
   .wx-legend .sw{display:inline-block;width:10px;height:10px;vertical-align:-1px;margin:0 3px 0 10px}
-  .weather-body{line-height:1.6;max-width:66ch}
-  .weather-body h3{font-size:.9375rem;margin:14px 0 4px} .weather-body h4{font-size:.8125rem;margin:12px 0 4px}
-  .weather-body p{margin:0 0 10px} .weather-body ul{margin:0 0 10px;padding-left:18px}
+  .weather-body{line-height:1.65;max-width:68ch;color:var(--ink);font-size:.9375rem}
+  .weather-body>p:first-child{font-size:1.0625rem;line-height:1.55;color:var(--ink);margin-bottom:14px}
+  .weather-body h3{font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);
+    margin:18px 0 6px;font-weight:600} .weather-body h4{font-size:.8125rem;margin:12px 0 4px}
+  .weather-body p{margin:0 0 11px} .weather-body ul{margin:0 0 11px;padding-left:0;list-style:none}
+  .weather-body li{padding:4px 0 4px 16px;border-left:1px solid var(--line-strong);margin-bottom:2px}
   .weather-body code{font-family:var(--mono);font-size:.8125rem;background:var(--inset);padding:1px 4px;border-radius:3px}
+  .weather-body strong{color:var(--ink);font-weight:600}
+  /* Entities the forecaster names are clickable, monospace, and stand out
+     as data references within the prose. */
+  a.wx-ent{font-family:var(--mono);font-size:.875em;color:var(--accent-ink);
+    background:color-mix(in srgb,var(--accent) 9%,transparent);padding:0 4px;border-radius:3px;
+    white-space:nowrap;text-decoration:none}
+  a.wx-ent:hover{background:color-mix(in srgb,var(--accent) 20%,transparent);text-decoration:none}
   .flag{font-size:1rem;margin-right:6px}
   .barcell{width:130px}
   .hbar{display:inline-block;width:120px;height:8px;background:var(--inset);border:1px solid var(--line);

@@ -8,6 +8,7 @@ no network.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -185,6 +186,33 @@ def generate_weather_report(store: RouteLensStore, sources: Any, ai: Any) -> dic
         model=getattr(ai, "model", ""), **report,
     )
     return report
+
+
+_ASN_RE = re.compile(r"\bAS(\d{1,10})\b")
+_V4_PFX_RE = re.compile(r"\b(\d{1,3}(?:\.\d{1,3}){3}/\d{1,2})\b")
+_V6_PFX_RE = re.compile(r"\b([0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{0,4}){2,}/\d{1,3})\b")
+
+
+def linkify_entities(html: str) -> str:
+    """Turn ASN and prefix references in already-rendered narrative HTML into
+    monospace links into the looking glass, so the prose is navigable like the
+    rest of the page. Runs after render_markdown, whose output contains no <a>
+    tags — so there is nothing to double-wrap."""
+    from urllib.parse import quote
+
+    def pfx(m):
+        p = m.group(1)
+        return f'<a class="wx-ent" href="/q?query={quote(p, safe="")}">{p}</a>'
+
+    html = _ASN_RE.sub(r'<a class="wx-ent" href="/q?query=AS\1">AS\1</a>', html)
+    html = _V4_PFX_RE.sub(pfx, html)
+    html = _V6_PFX_RE.sub(pfx, html)
+    return html
+
+
+def render_narrative(md: str) -> str:
+    """The AI briefing body as safe HTML with entities linkified."""
+    return linkify_entities(render_markdown(md))
 
 
 def build_view(evidence: dict[str, Any]) -> dict[str, Any]:

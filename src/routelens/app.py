@@ -465,11 +465,11 @@ def create_app(config: dict | None = None) -> Flask:
 
     @app.get("/dashboards/weather")
     def dashboard_weather():
-        from .weather import build_view, render_markdown
+        from .weather import build_view, render_narrative
 
         report = store.latest_weather_report()
         history = store.list_weather_reports(limit=12)
-        body_html = render_markdown(report["body_md"]) if report else ""
+        body_html = render_narrative(report["body_md"]) if report else ""
         view = build_view(report["evidence"]) if report else None
         return render_template(
             "dashboards/weather.html", report=report, body_html=body_html,

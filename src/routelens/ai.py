@@ -55,17 +55,22 @@ Write a briefing that:
 common and fine — say so plainly, do not manufacture drama), `minor` for \
 isolated regional events, `notable` for widespread or multiple concurrent \
 events, `severe` only for major global disruption.
-- In `body_md` (markdown, ~150-300 words), explains what is happening in \
-plain English and — the valuable part — draws explicit correlations between \
-the internal BGP signals and the external outage/hijack feeds when they line \
-up (e.g. an IODA outage in a country whose origins also spiked in our churn \
-data, or a GRIP hijack candidate matching one of our confirmed origin changes).
+- Structures `body_md` (markdown, ~150-300 words) for fast scanning, NOT as \
+one dense block: open with a single-sentence lead capturing the overall \
+picture; then one or two short paragraphs; then, when there is anything worth \
+monitoring, a `## Watch` section as a bullet list of specific ASNs/prefixes \
+with a few words each. The valuable part is drawing explicit correlations \
+between the internal BGP signals and the external outage/hijack feeds when \
+they line up (e.g. an IODA outage in a country whose origins also spiked in \
+our churn data, or a GRIP hijack candidate matching a confirmed origin change).
 
 Ground every statement in the evidence. Never invent events, numbers, \
-countries, or ASNs not present in the data. Name specific countries, ASNs and \
-prefixes from the evidence where relevant. If a feed is empty, simply don't \
-mention it. Attribute external data briefly (IODA, GRIP, Cloudflare Radar) \
-where you rely on it."""
+countries, or ASNs not present in the data. Refer to ASNs by their number \
+(e.g. `AS15169`) and use ONLY the operator names and country labels that \
+appear in the evidence — do not add your own enrichment (no guessed company \
+names, cities, or countries). If a feed is empty, simply don't mention it. \
+Attribute external data briefly (IODA, GRIP, Cloudflare Radar) where you \
+rely on it."""
 
 
 def _import_mistral():

@@ -283,3 +283,36 @@ def test_build_view_handles_empty_evidence():
 
     assert view["stats"] == {"hotspots": 0, "outages": 0, "hijacks": 0, "origin_changes": 0, "max_spike": 0}
     assert view["hotspots"] == [] and view["outages"] == [] and view["map"]["hotspots"] == []
+
+
+def test_linkify_entities_wires_asns_and_prefixes():
+    from routelens.weather import linkify_entities
+
+    html = ("<p>Top churner <strong>AS19429</strong> and AS266016; prefix "
+            "185.39.51.0/24 flipped; v6 2a00:1450::/32 seen.</p>")
+
+    out = linkify_entities(html)
+
+    assert '<a class="wx-ent" href="/q?query=AS19429">AS19429</a>' in out
+    assert '<a class="wx-ent" href="/q?query=AS266016">AS266016</a>' in out
+    assert 'href="/q?query=185.39.51.0%2F24">185.39.51.0/24</a>' in out
+    assert '2a00:1450::/32</a>' in out
+    # Bold wrapper is preserved around the now-linked ASN.
+    assert "<strong><a" in out
+
+
+def test_linkify_leaves_plain_text_and_dates_alone():
+    from routelens.weather import linkify_entities
+
+    html = "<p>Observed at 2026-07-16T12:00, version 1.6.0, nothing else.</p>"
+
+    assert linkify_entities(html) == html
+
+
+def test_render_narrative_combines_markdown_and_links():
+    from routelens.weather import render_narrative
+
+    out = render_narrative("Watch **AS15169** and 8.8.8.0/24 closely.")
+
+    assert "<strong><a class=\"wx-ent\" href=\"/q?query=AS15169\">AS15169</a></strong>" in out
+    assert 'href="/q?query=8.8.8.0%2F24"' in out
