@@ -123,3 +123,100 @@ def test_weather_report_store_roundtrip(tmp_path):
     first = next(r for r in reports if r["id"] == report_id)
     assert first["evidence"]["spikes"] == ["rrc01"]
     assert first["generated_at"]
+
+
+class FakeAI:
+    model = "mistral-small-latest"
+
+    def __init__(self, result=None):
+        self.result = result or {
+            "headline": "Calm across the global table",
+            "severity": "calm",
+            "body_md": "## Summary\nNothing notable in the last six hours.",
+        }
+        self.last_evidence = None
+
+    def summarize(self, evidence):
+        self.last_evidence = evidence
+        return self.result
+
+
+class FakeSources:
+    def __init__(self, ioda=None, grip=None, radar=None):
+        self._ioda = ioda if ioda is not None else {"ok": True, "data": {"alerts": [
+            {"entity_type": "country", "entity_code": "SD", "entity_name": "Sudan",
+             "datasource": "merit-nt", "level": "critical", "time": 1784176800,
+             "value": 10, "history": 55},
+        ]}}
+        self._grip = grip if grip is not None else {"ok": True, "data": {"events": [
+            {"id": "moas-x", "suspicion": 85, "label": "suspicious", "confidence": 90,
+             "attackers": ["64666"], "victims": ["64500"], "explanation": "hijack-y", "time": 1},
+            {"id": "moas-y", "suspicion": 5, "label": "legitimate", "confidence": 90,
+             "attackers": [], "victims": [], "explanation": "fine", "time": 2},
+        ]}}
+        self._radar = radar if radar is not None else {"ok": False, "unconfigured": True}
+
+    def ioda_alerts(self):
+        return self._ioda
+
+    def grip_events(self):
+        return self._grip
+
+    def radar_outages(self):
+        return self._radar
+
+
+def test_build_evidence_merges_internal_and_external(tmp_path):
+    from routelens.weather import build_evidence
+
+    store = _seeded_store(tmp_path)
+    evidence = build_evidence(store, FakeSources())
+
+    assert "internal" in evidence
+    assert evidence["ioda"][0]["entity_code"] == "SD"
+    # GRIP is filtered to suspicious events only — the 'legitimate' one drops.
+    assert [e["id"] for e in evidence["grip"]] == ["moas-x"]
+    # Radar unconfigured degrades to an empty list, not an error.
+    assert evidence["radar_outages"] == []
+
+
+def test_generate_weather_report_saves_and_returns(tmp_path):
+    from routelens.weather import generate_weather_report
+
+    store = _seeded_store(tmp_path)
+    ai = FakeAI()
+
+    report = generate_weather_report(store, FakeSources(), ai)
+
+    assert report["severity"] == "calm"
+    # It was handed the merged evidence.
+    assert ai.last_evidence["ioda"][0]["entity_code"] == "SD"
+    # And persisted with the model id + evidence.
+    saved = store.latest_weather_report()
+    assert saved["headline"] == "Calm across the global table"
+    assert saved["model"] == "mistral-small-latest"
+    assert saved["evidence"]["ioda"][0]["entity_code"] == "SD"
+
+
+def test_generate_weather_report_without_ai_is_noop(tmp_path):
+    from routelens.weather import generate_weather_report
+
+    store = _seeded_store(tmp_path)
+
+    report = generate_weather_report(store, FakeSources(), None)
+
+    assert report is None
+    assert store.latest_weather_report() is None
+
+
+def test_generate_weather_report_clamps_bad_severity(tmp_path):
+    from routelens.weather import generate_weather_report
+
+    store = _seeded_store(tmp_path)
+    ai = FakeAI({"headline": "H", "severity": "apocalyptic", "body_md": "b"})
+
+    report = generate_weather_report(store, FakeSources(), ai)
+
+    # An out-of-vocabulary severity from the model is clamped to 'notable'.
+    assert report["severity"] == "notable"
+    assert store.latest_weather_report()["severity"] == "notable"

@@ -1,0 +1,103 @@
+"""Mistral client for the Internet Weather briefing.
+
+Reads MISTRAL_API_KEY from the environment (never the repo); `from_env`
+returns None when unset so the app degrades to "generator not configured"
+rather than erroring. The SDK client is injectable for testing.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+from typing import Any
+
+# Mistral Small 4 — cheapest model with strong instruction-following and
+# schema-enforced JSON; EU-resident processing. ~$0.25/month at 6-hourly.
+MODEL = "mistral-small-latest"
+
+WEATHER_SCHEMA = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "internet_weather",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "headline": {"type": "string"},
+                "severity": {"type": "string", "enum": ["calm", "minor", "notable", "severe"]},
+                "body_md": {"type": "string"},
+            },
+            "required": ["headline", "severity", "body_md"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+SYSTEM_PROMPT = """You are the forecaster for RouteLens "Internet Weather", \
+briefing a technical audience (network engineers, NOC staff) on the live state \
+of the global Internet's core routing over the last six hours.
+
+You are given JSON evidence with two parts: `internal` — RouteLens's own \
+observations from the RIPE RIS BGP firehose (collector activity spikes, \
+country churn hotspots, top churning ASNs, flapping prefixes, confirmed \
+origin changes) — and external outage/hijack feeds: `ioda` (Georgia Tech \
+outage alerts per country/ASN), `grip` (BGP hijack-candidate events with a \
+suspicion score), and `radar_outages` (Cloudflare Radar outage annotations \
+with causes).
+
+Write a briefing that:
+- Leads with a one-line headline capturing the single most important thing.
+- Sets severity honestly: `calm` when nothing notable is happening (this is \
+common and fine — say so plainly, do not manufacture drama), `minor` for \
+isolated regional events, `notable` for widespread or multiple concurrent \
+events, `severe` only for major global disruption.
+- In `body_md` (markdown, ~150-300 words), explains what is happening in \
+plain English and — the valuable part — draws explicit correlations between \
+the internal BGP signals and the external outage/hijack feeds when they line \
+up (e.g. an IODA outage in a country whose origins also spiked in our churn \
+data, or a GRIP hijack candidate matching one of our confirmed origin changes).
+
+Ground every statement in the evidence. Never invent events, numbers, \
+countries, or ASNs not present in the data. Name specific countries, ASNs and \
+prefixes from the evidence where relevant. If a feed is empty, simply don't \
+mention it. Attribute external data briefly (IODA, GRIP, Cloudflare Radar) \
+where you rely on it."""
+
+
+class WeatherAI:
+    def __init__(self, client: Any, model: str = MODEL):
+        self._client = client
+        self.model = model
+
+    @classmethod
+    def from_env(cls) -> "WeatherAI | None":
+        key = os.environ.get("MISTRAL_API_KEY")
+        if not key:
+            return None
+        from mistralai import Mistral
+
+        return cls(Mistral(api_key=key))
+
+    def summarize(self, evidence: dict[str, Any]) -> dict[str, Any]:
+        response = self._client.chat.complete(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": "Evidence:\n" + json.dumps(evidence, default=str)},
+            ],
+            response_format=WEATHER_SCHEMA,
+            temperature=0.3,
+        )
+        content = response.choices[0].message.content
+        return _parse_json(content)
+
+
+def _parse_json(content: str) -> dict[str, Any]:
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", content, re.DOTALL)
+        if match:
+            return json.loads(match.group(0))
+        raise

@@ -125,6 +125,31 @@ with #1 and reuse it everywhere:
 10. Country instability — LIVE 2026-07-14 (rollup of origin buckets by
     bgp.tools registration country, intensity = announcements/origin)
 
+## Internet Weather (AI briefing) — IN PROGRESS on dev, 2026-07-16
+
+AI-written plain-English briefing on the live state of the Internet's core,
+for a technical audience. Architecture:
+- `weather.py`: `detect_anomalies` (statistical pre-filter over our own
+  buckets — collector spikes vs trailing baseline, country intensity
+  outliers, flap/churn leaders, origin changes) → `build_evidence` (merges
+  those with IODA/GRIP/Radar-outage feeds) → `generate_weather_report`
+  (calls the model, clamps severity, persists). The AI only ever sees what
+  the pre-filter judged interesting — grounded + cheap.
+- `ai.py`: `WeatherAI` wraps Mistral (`mistral-small-latest`, schema-enforced
+  JSON, EU-resident). `from_env()` returns None without `MISTRAL_API_KEY` so
+  everything degrades to "not configured". ~$0.25/mo at 6-hourly.
+- Generation runs inside the aggregator loop every 6h (no new scheduled
+  task). On-demand: `python -m routelens.weather` (needs the key).
+- `/dashboards/weather` (Live sidebar) shows the latest briefing + evidence
+  + history. Pulse map gains an "Outages" layer (red pulse rings) from
+  IODA + Radar country outages via `/api/map/outages`.
+- Sources: IODA + GRIP need NO key (Georgia Tech, academic/edu AUP —
+  attribute them, poll politely, cache); Radar outages reuse
+  `CLOUDFLARE_RADAR_TOKEN`. All degrade gracefully.
+- ENV (set on dev web+aggregator via Coolify): `MISTRAL_API_KEY`,
+  `CLOUDFLARE_RADAR_TOKEN`. Not yet on production — promote after review.
+- Downdetector was rejected: no public API + scraping prohibited by terms.
+
 ALL TEN DASHBOARDS SHIPPED 2026-07-14. svc-01 now runs three units:
 routelens.service (web), routelens-aggregator.service (RIS Live stream),
 routelens-spacescan.timer (daily bgp.tools table ingest) — plus the original

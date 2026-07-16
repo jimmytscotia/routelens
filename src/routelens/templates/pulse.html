@@ -69,6 +69,13 @@
   .marker.quiet{background:var(--faint);border-color:var(--line-strong)}
   .ixp-marker{width:11px;height:11px;background:var(--ok);border:1px solid #d8ffe8;
     transform:rotate(45deg);cursor:pointer}
+  .outage-ring{width:20px;height:20px;border-radius:50%;background:rgba(255,93,110,.55);
+    border:2px solid #ff5d6e;cursor:pointer}
+  @media (prefers-reduced-motion: no-preference){
+    .outage-ring{animation:outagePulse 1.8s ease-out infinite}
+    @keyframes outagePulse{0%{box-shadow:0 0 0 0 rgba(255,93,110,.5)}
+      70%{box-shadow:0 0 0 12px rgba(255,93,110,0)}100%{box-shadow:0 0 0 0 rgba(255,93,110,0)}}
+  }
   .marker.flash{background:#fff;box-shadow:0 0 0 6px rgba(56,168,255,.35)}
   @media (prefers-reduced-motion: no-preference){
     .marker{transition:box-shadow .5s ease-out,background .5s ease-out}
@@ -97,6 +104,7 @@
         <button class="lyr active" data-layer="collectors" role="tab" title="RIS collectors sized by how many updates each received in the last hour">Collector load</button>
         <button class="lyr" data-layer="churn" role="tab" title="Countries shaded by announcement churn per active origin network over the last 6 hours">Country churn</button>
         <button class="lyr" data-layer="events" role="tab" title="Origin changes and flapping prefixes from the last 6 hours, plotted at their origin country">Events</button>
+        <button class="lyr" data-layer="outages" role="tab" title="Countries with active Internet outages detected by IODA and Cloudflare Radar">Outages</button>
         <button id="uk-btn" title="Zoom to the UK">UK</button>
         <span class="note" id="map-note">collector load · last hour</span>
       </div>
@@ -136,6 +144,7 @@
     collectors: 'collector load · last hour',
     churn: 'churn intensity by country · last 6h',
     events: 'origin changes & flaps · last 6h',
+    outages: 'detected outages · IODA + Cloudflare Radar',
   };
 
   function mapFail(reason) {
@@ -190,6 +199,7 @@
     if (!map) return;
     if (activeLayer === 'collectors') showCollectors();
     else if (activeLayer === 'churn') showChurn();
+    else if (activeLayer === 'outages') showOutages();
     else showEvents();
   }
 
@@ -333,6 +343,40 @@
         legend.style.display = 'block';
       })
       .catch(e => mapFail('event data failed: ' + e.message));
+  }
+
+  // Layer 4: detected country-level outages (IODA + Radar) as red pulse rings.
+  function showOutages() {
+    if (!world) { setTimeout(showOutages, 300); return; }
+    fetch('/api/map/outages')
+      .then(r => r.json())
+      .then(d => {
+        if (activeLayer !== 'outages') return;
+        clearLayers();
+        const group = L.layerGroup();
+        for (const c of d.countries || []) {
+          const at = centroids[c.country];
+          if (!at) continue;
+          const sources = [c.ioda && 'IODA', c.radar && 'Cloudflare Radar'].filter(Boolean).join(' + ');
+          const cause = (c.causes || []).length ? '<br>cause: ' + c.causes.join(', ') : '';
+          const icon = L.divIcon({className: '', html: '<div class="outage-ring"></div>', iconSize: [20, 20]});
+          L.marker([at.lat, at.lng], {icon, title: c.name + ' — outage'})
+            .bindPopup(`<strong>${c.name}</strong><br>outage detected by ${sources}${cause}`)
+            .addTo(group);
+        }
+        layers.outages = group.addTo(map);
+        const legend = $('map-legend');
+        const note = d.asn_alert_count
+          ? ` · ${d.asn_alert_count} ASN-level alert${d.asn_alert_count !== 1 ? 's' : ''} (not mapped)`
+          : '';
+        legend.innerHTML = '<span class="sw" style="background:#ff5d6e;border-radius:50%"></span>' +
+          'country outage (IODA / Radar)' + note;
+        legend.style.display = 'block';
+        if (!(d.countries || []).length) {
+          legend.innerHTML = 'no active country-level outages detected' + note;
+        }
+      })
+      .catch(e => mapFail('outage data failed: ' + e.message));
   }
 
   function startMap() { try { initMap(); } catch (e) { mapFail(e.message); } }

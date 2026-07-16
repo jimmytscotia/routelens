@@ -463,6 +463,42 @@ def create_app(config: dict | None = None) -> Flask:
             return (0, LINX_UK_ORDER.index(group))
         return (1, group)
 
+    @app.get("/dashboards/weather")
+    def dashboard_weather():
+        from .weather import render_markdown
+
+        report = store.latest_weather_report()
+        history = store.list_weather_reports(limit=12)
+        body_html = render_markdown(report["body_md"]) if report else ""
+        return render_template(
+            "dashboards/weather.html", report=report, body_html=body_html, history=history,
+        )
+
+    @app.get("/api/map/outages")
+    def api_map_outages():
+        from .countries import country_name
+
+        ioda = _safe(lambda: sources().ioda_alerts())
+        radar = _safe(lambda: sources().radar_outages())
+        countries: dict[str, dict] = {}
+        asn_alert_count = 0
+        for alert in (ioda.get("data", {}).get("alerts") if ioda.get("ok") else []) or []:
+            if alert.get("entity_type") == "country" and alert.get("entity_code"):
+                cc = alert["entity_code"]
+                entry = countries.setdefault(cc, {"country": cc, "name": country_name(cc),
+                                                   "ioda": False, "radar": False, "causes": []})
+                entry["ioda"] = True
+            elif alert.get("entity_type") == "asn":
+                asn_alert_count += 1
+        for outage in (radar.get("data", {}).get("outages") if radar.get("ok") else []) or []:
+            for cc in outage.get("locations") or []:
+                entry = countries.setdefault(cc, {"country": cc, "name": country_name(cc),
+                                                  "ioda": False, "radar": False, "causes": []})
+                entry["radar"] = True
+                if outage.get("cause") and outage["cause"] not in entry["causes"]:
+                    entry["causes"].append(outage["cause"])
+        return jsonify({"countries": list(countries.values()), "asn_alert_count": asn_alert_count})
+
     @app.get("/api/map/linx")
     def api_map_linx():
         from .uk import LINX_UK_EXCHANGES

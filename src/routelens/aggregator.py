@@ -30,6 +30,7 @@ FLUSH_INTERVAL_S = 15
 PRUNE_INTERVAL_S = 3600
 NAMES_REFRESH_S = 86400  # bgp.tools asks for at most daily fetches
 RPKI_REFRESH_S = 3600    # ~20 paced RouteViews calls per hour
+WEATHER_REFRESH_S = 21600  # AI Internet Weather briefing every 6 hours
 RETENTION_DAYS = int(os.environ.get("ROUTELENS_RETENTION_DAYS", "7"))
 
 
@@ -279,6 +280,8 @@ async def run(store: RouteLensStore) -> None:
     last_prune = 0.0
     last_names = 0.0
     last_rpki = 0.0
+    # Wait a full period before the first briefing so it has data to describe.
+    last_weather = time.time()
     retry_s = 1
 
     while True:
@@ -337,6 +340,27 @@ async def run(store: RouteLensStore) -> None:
                                 log.warning("ASN name refresh failed: %s", exc)
 
                         asyncio.get_running_loop().run_in_executor(None, _refresh)
+                    if now - last_weather >= WEATHER_REFRESH_S:
+                        last_weather = now
+
+                        def _weather() -> None:
+                            try:
+                                from .ai import WeatherAI
+                                from .sources import SourceClient
+                                from .weather import generate_weather_report
+
+                                ai = WeatherAI.from_env()
+                                if ai is None:
+                                    log.info("weather: MISTRAL_API_KEY unset, skipping briefing")
+                                    return
+                                report = generate_weather_report(store, SourceClient(store), ai)
+                                if report:
+                                    log.info("weather: generated %r (%s)",
+                                             report["headline"], report["severity"])
+                            except Exception as exc:
+                                log.warning("weather generation failed: %s", exc)
+
+                        asyncio.get_running_loop().run_in_executor(None, _weather)
         except asyncio.CancelledError:
             acc.flush(store)
             raise

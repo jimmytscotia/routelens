@@ -515,3 +515,71 @@ def test_league_linx_tag_is_ixp_driven(tmp_path):
     # Frankfurt (DE-CIX) gets no LINX tag.
     rrc12_row = body[body.index('data-key="rrc12"'):body.index('data-key="rrc12"') + 400]
     assert "LINX" not in rrc12_row
+
+
+def test_weather_page_renders_latest_report(tmp_path):
+    app = _app(tmp_path)
+    store = app.config["ROUTELENS_STORE"]
+    store.save_weather_report(
+        period_hours=6, headline="Squall over Sudan", severity="minor",
+        body_md="## Summary\nA regional outage in **Sudan** lines up with a churn spike.",
+        evidence={"ioda": [{"entity_code": "SD"}]}, model="mistral-small-latest",
+    )
+    client = app.test_client()
+
+    body = client.get("/dashboards/weather").data.decode()
+
+    assert "Internet Weather" in body
+    assert "Squall over Sudan" in body
+    # Markdown body is rendered (bold -> strong), severity shown, sources credited.
+    assert "<strong>Sudan</strong>" in body
+    assert "minor" in body
+    assert "IODA" in body and "GRIP" in body and "Radar" in body
+
+
+def test_weather_page_empty_state_when_no_report(tmp_path):
+    client = _app(tmp_path).test_client()
+
+    body = client.get("/dashboards/weather").data.decode()
+
+    assert "Internet Weather" in body
+    assert "no briefing" in body.lower()
+
+
+def test_weather_in_sidebar_under_live(tmp_path):
+    body = _app(tmp_path).test_client().get("/dashboards/weather").data.decode()
+
+    assert "/dashboards/weather" in body
+
+
+def test_map_outages_merges_ioda_and_radar_by_country(tmp_path):
+    app = _app(tmp_path)
+
+    class FakeSources:
+        def ioda_alerts(self):
+            return {"ok": True, "data": {"alerts": [
+                {"entity_type": "country", "entity_code": "SD", "entity_name": "Sudan",
+                 "datasource": "merit-nt", "level": "critical", "value": 10, "history": 55},
+                {"entity_type": "asn", "entity_code": "64500", "entity_name": "AS64500",
+                 "datasource": "bgp", "level": "critical", "value": 1, "history": 9},
+            ]}}
+
+        def radar_outages(self):
+            return {"ok": True, "data": {"outages": [
+                {"id": "o1", "locations": ["SD"], "cause": "POWER_OUTAGE", "scope": "NATIONWIDE",
+                 "description": "Nationwide outage", "asns": [], "start": "x", "end": None},
+            ]}}
+
+    app.config["ROUTELENS_SOURCES"] = FakeSources()
+    payload = app.test_client().get("/api/map/outages").get_json()
+
+    countries = payload["countries"]
+    sd = next(c for c in countries if c["country"] == "SD")
+    # The client places rings using its own world.geojson centroids, so the
+    # server returns country codes + metadata, not coordinates.
+    assert sd["name"] == "Sudan"
+    assert sd["ioda"] is True
+    assert sd["radar"] is True
+    assert "POWER_OUTAGE" in sd["causes"]
+    # ASN-scoped IODA alerts don't get a map ring (no location), but are counted.
+    assert payload["asn_alert_count"] == 1

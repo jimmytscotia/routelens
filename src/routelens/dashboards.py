@@ -33,6 +33,7 @@ def nav() -> list[dict]:
             "category": "Live",
             "items": [
                 {"title": "Pulse", "url": "/", "status": "live"},
+                {"title": "Internet Weather", "url": "/dashboards/weather", "status": "live"},
                 {"title": "Looking glass", "url": "/q", "status": "live"},
             ],
         },

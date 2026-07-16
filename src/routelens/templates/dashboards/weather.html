@@ -1,0 +1,72 @@
+{% extends "dashboards/_layout.html" %}
+{% block title %}Internet Weather · RouteLens{% endblock %}
+{% block dashboard %}
+  <div class="pagehead" style="padding-top:0">
+    <h1>Internet Weather</h1>
+    <p>A plain-English briefing on the live state of the Internet's core routing, written every
+       six hours by correlating RouteLens's own BGP observations with global outage and hijack
+       feeds. Every claim is grounded in the evidence shown below the report.</p>
+  </div>
+  {% if report %}
+  <section class="panel weather-report">
+    <header class="phead">
+      <h2>{{ report.headline }}</h2>
+      <span class="sev-badge sev-{{ report.severity }}">{{ report.severity }}</span>
+    </header>
+    <div class="weather-body">{{ body_html|safe }}</div>
+    <p class="attribution">
+      Generated {{ report.generated_at }} UTC by {{ report.model }} over the prior {{ report.period_hours }}h.
+      Outage/hijack data: <strong>IODA</strong> (Georgia Tech), <strong>GRIP</strong> (Georgia Tech),
+      <strong>Cloudflare Radar</strong> (CC BY-NC 4.0). BGP observations: RouteLens / RIPE RIS.
+      AI-written — verify before acting.
+    </p>
+  </section>
+
+  <details class="panel">
+    <summary>Evidence this briefing was based on</summary>
+    <pre class="evidence mono">{{ report.evidence | tojson(indent=2) }}</pre>
+  </details>
+
+  {% if history|length > 1 %}
+  <section class="panel">
+    <header class="phead"><h2>Recent briefings</h2></header>
+    <ul class="weather-history">
+      {% for h in history %}
+      <li>
+        <span class="sev-dot sev-{{ h.severity }}" aria-hidden="true"></span>
+        <span class="mono when">{{ h.generated_at[:16] }}</span>
+        <span class="hl">{{ h.headline }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+  {% else %}
+  <section class="panel">
+    <div class="empty">
+      <strong>No briefing yet.</strong>
+      <p>The first Internet Weather report is written a few hours after the aggregator starts,
+         then every six hours. Data sources: IODA, GRIP, Cloudflare Radar, and RouteLens's own
+         RIPE RIS observations.</p>
+    </div>
+  </section>
+  {% endif %}
+<style>
+  .sev-badge{font-family:var(--mono);font-size:.625rem;text-transform:uppercase;letter-spacing:.06em;
+    border:1px solid var(--line-strong);border-radius:999px;padding:2px 9px}
+  .sev-badge.sev-calm{color:var(--ok)} .sev-badge.sev-minor,.sev-badge.sev-notable{color:var(--warn)}
+  .sev-badge.sev-severe{color:var(--crit)}
+  .weather-body{line-height:1.6;max-width:64ch}
+  .weather-body h3{font-size:.9375rem;margin:14px 0 4px} .weather-body h4{font-size:.8125rem;margin:12px 0 4px}
+  .weather-body p{margin:0 0 10px} .weather-body ul{margin:0 0 10px;padding-left:18px}
+  .weather-body code{font-family:var(--mono);font-size:.8125rem;background:var(--inset);padding:1px 4px;border-radius:3px}
+  .evidence{max-height:340px;overflow:auto;font-size:.6875rem;color:var(--muted);white-space:pre-wrap}
+  details.panel summary{cursor:pointer;color:var(--muted);font-size:.8125rem}
+  .weather-history{list-style:none;margin:0;padding:0;font-size:.8125rem}
+  .weather-history li{display:flex;gap:10px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)}
+  .weather-history .when{color:var(--faint)} .weather-history .hl{color:var(--ink)}
+  .sev-dot{width:8px;height:8px;border-radius:50%;background:var(--faint);flex:none}
+  .sev-dot.sev-calm{background:var(--ok)} .sev-dot.sev-minor,.sev-dot.sev-notable{background:var(--warn)}
+  .sev-dot.sev-severe{background:var(--crit)}
+</style>
+{% endblock %}
