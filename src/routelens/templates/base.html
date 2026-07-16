@@ -126,6 +126,14 @@
     .explain-box.muted{color:var(--muted)}
     .explain-tag{font-family:var(--mono);font-size:.5625rem;color:var(--accent-ink);
       border:1px solid var(--line-strong);border-radius:999px;padding:0 5px;margin-right:6px}
+    /* reusable popup dialog */
+    .rl-modal{background:var(--surface);color:var(--ink);border:1px solid var(--line-strong);
+      border-radius:var(--r);max-width:520px;width:calc(100% - 32px);padding:18px 20px}
+    .rl-modal::backdrop{background:rgba(4,6,10,.6)}
+    .rl-modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
+    .rl-modal-head h2{margin:0;font-size:.875rem;font-family:var(--mono)}
+    .rl-close{background:none;border:0;color:var(--muted);font-size:1.3rem;line-height:1;cursor:pointer;padding:0}
+    .rl-close:hover{color:var(--ink)}
     .badge.healthy,.badge.valid{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 35%,transparent)}
     .badge.warning{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
     .badge.critical,.badge.invalid{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 35%,transparent)}

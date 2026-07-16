@@ -29,10 +29,10 @@
           {% else %}
             <span class="badge warning" title="A one-way origin change: could be a planned migration, an acquisition, a leak, or in the worst case a hijack. Click the prefix to see current announcements and RPKI status.">moved</span>
           {% endif %}</td>
-      <td><button class="explain-btn" title="Explain this event in plain English"
+      <td><button class="explain-btn" type="button" title="Explain this event in plain English"
             hx-get="/partials/explain?kind=origin-change&amp;prefix={{ e.prefix|urlencode }}"
-            hx-target="closest tr" hx-swap="afterend"
-            hx-on::after-request="this.remove()">explain</button></td>
+            hx-target="#explain-content" hx-swap="innerHTML"
+            onclick="explainOpen('{{ e.prefix }}')">explain</button></td>
     </tr>
   {% endfor %}
   </tbody>

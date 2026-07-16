@@ -751,3 +751,13 @@ def test_origin_changes_rows_have_explain_buttons(tmp_path):
 
     assert 'class="explain-btn"' in body
     assert "/partials/explain?kind=origin-change&amp;prefix=203.0.113.0" in body
+    # The button targets the shared popup and opens it.
+    assert 'hx-target="#explain-content"' in body
+    assert "explainOpen(" in body
+
+
+def test_origin_changes_page_has_explain_dialog(tmp_path):
+    body = _app(tmp_path).test_client().get("/dashboards/origin-changes").data.decode()
+
+    assert '<dialog id="explain-modal"' in body
+    assert 'id="explain-content"' in body
