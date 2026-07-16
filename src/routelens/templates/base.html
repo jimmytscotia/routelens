@@ -4,40 +4,67 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}RouteLens{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
   <style>
+    @font-face{font-family:'Clash Display';src:url('/static/fonts/ClashDisplay-Variable.woff2') format('woff2-variations');
+      font-weight:200 700;font-display:swap}
+    @font-face{font-family:'Satoshi';src:url('/static/fonts/Satoshi-Variable.woff2') format('woff2-variations');
+      font-weight:300 900;font-display:swap}
     :root{
-      --bg:#0b0e13; --surface:#10141b; --surface2:#0d1117; --inset:#0e1218;
-      --line:#1e2733; --line-strong:#2c3949;
-      --ink:#dbe2ea; --muted:#93a1b3; --faint:#5d6b7d;
-      --accent:#38a8ff; --accent-ink:#9fd4ff;
+      color-scheme:dark;
+      /* ink — near-black, cool-tinted (Torc-family) */
+      --bg:#070B14; --surface:#0d1526; --surface2:#0a1120; --inset:#111a2e;
+      --line:rgba(255,255,255,.09); --line-strong:rgba(255,255,255,.17);
+      --ink:#F4F6FB; --muted:#A7B4CC; --faint:#74839E;
+      /* cool light — data/telemetry accent */
+      --accent:#3B6EF6; --accent-ink:#7FC4EE;
+      /* gold — brand signature */
+      --gold:#C9A24B; --gold-bright:#E7C877; --gold-deep:#9C7530;
+      /* state — meaning unchanged */
       --ok:#3fd68f; --warn:#f0c249; --crit:#ff5d6e;
-      --r:6px;
+      /* glass */
+      --glass-bg:rgba(255,255,255,.045); --glass-bg-strong:rgba(255,255,255,.075);
+      --r:9px; --r-lg:16px;
       --z-nav:10; --z-tip:20;
+      --font-display:'Clash Display',system-ui,sans-serif;
       --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
     }
     *{box-sizing:border-box}
     html{font-size:16px}
     body{margin:0;background:var(--bg);color:var(--ink);
-      font:400 .875rem/1.55 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
-      min-height:100vh}
+      font:400 .875rem/1.55 Satoshi,system-ui,-apple-system,"Segoe UI",sans-serif;
+      min-height:100vh;position:relative}
+    /* static cool-gradient ambient (WebGL-free — a subtle version of Torc's) */
+    body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+      background:
+        radial-gradient(70% 55% at 15% 4%, rgba(59,110,246,.13), transparent 60%),
+        radial-gradient(55% 48% at 94% 8%, rgba(53,208,224,.08), transparent 62%),
+        radial-gradient(75% 65% at 50% 106%, rgba(85,102,236,.10), transparent 60%),
+        var(--bg)}
     a{color:var(--accent-ink);text-decoration:none}
     a:hover{text-decoration:underline}
-    h1{font-size:1.375rem;font-weight:650;letter-spacing:-.015em;margin:0 0 .35rem;text-wrap:balance}
-    h2{font-size:1rem;font-weight:600;margin:0}
-    h3{font-size:.875rem;font-weight:600;margin:0}
+    ::selection{background:rgba(231,200,119,.26);color:#fff}
+    :focus-visible{outline:2px solid var(--gold-bright);outline-offset:2px;border-radius:6px}
+    h1{font-family:var(--font-display);font-size:1.6rem;font-weight:600;letter-spacing:-.03em;margin:0 0 .35rem;text-wrap:balance}
+    h2{font-family:var(--font-display);font-size:1.05rem;font-weight:600;letter-spacing:-.02em;margin:0}
+    h3{font-family:var(--font-display);font-size:.9rem;font-weight:600;letter-spacing:-.01em;margin:0}
     code,.mono{font-family:var(--mono);font-size:.8125rem}
     .wrap{width:min(1280px,calc(100% - 32px));margin:0 auto}
 
-    /* top bar */
-    .nav{position:sticky;top:0;z-index:var(--z-nav);background:var(--surface2);
+    /* top bar — glass */
+    .nav{position:sticky;top:0;z-index:var(--z-nav);
+      background:rgba(7,11,20,.72);backdrop-filter:blur(14px) saturate(150%);
+      -webkit-backdrop-filter:blur(14px) saturate(150%);
       border-bottom:1px solid var(--line)}
-    .navin{height:52px;display:flex;align-items:center;gap:20px}
-    .brand{display:flex;align-items:center;gap:8px;font-weight:650;color:var(--ink);font-size:.9375rem}
+    .navin{height:56px;display:flex;align-items:center;gap:20px}
+    .brand{display:flex;align-items:center;gap:9px;font-family:var(--font-display);
+      font-weight:600;letter-spacing:-.01em;color:var(--ink);font-size:1rem}
     .brand:hover{text-decoration:none}
+    .brand img{width:24px;height:24px;flex:none}
     .livedot{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
     @media (prefers-reduced-motion: no-preference){
       .livedot{animation:beat 2.4s ease-out infinite}
@@ -52,10 +79,11 @@
       border-radius:var(--r) 0 0 var(--r);padding:7px 10px;color:var(--ink);
       font-family:var(--mono);font-size:.8125rem}
     .navsearch input::placeholder{color:var(--muted)}
-    .navsearch input:focus{outline:none;border-color:var(--accent)}
-    .navsearch button{background:var(--accent);border:1px solid var(--accent);color:#04121f;
-      font-weight:600;font-size:.8125rem;padding:7px 14px;border-radius:0 var(--r) var(--r) 0;cursor:pointer}
-    .navsearch button:hover{filter:brightness(1.1)}
+    .navsearch input:focus{outline:none;border-color:var(--gold-deep)}
+    .navsearch button{background:linear-gradient(180deg,var(--gold-bright),var(--gold));border:0;color:#1a1405;
+      font-weight:700;font-size:.8125rem;padding:7px 16px;border-radius:0 var(--r) var(--r) 0;cursor:pointer;
+      box-shadow:0 8px 24px -12px rgba(231,200,119,.55)}
+    .navsearch button:hover{filter:brightness(1.06)}
 
     /* app shell: global sidebar + content */
     .shell{display:grid;grid-template-columns:190px minmax(0,1fr);gap:22px;align-items:start}
@@ -67,7 +95,8 @@
     .navgroup li a,.navgroup li .planned{display:flex;justify-content:space-between;align-items:center;
       gap:8px;padding:5px 10px;border-radius:var(--r);color:var(--muted)}
     .navgroup li a:hover{color:var(--ink);background:var(--inset);text-decoration:none}
-    .navgroup li a[aria-current="page"]{color:var(--ink);background:var(--inset);font-weight:600}
+    .navgroup li a[aria-current="page"]{color:var(--ink);background:var(--inset);font-weight:600;
+      box-shadow:inset 2px 0 0 var(--gold)}
     .navgroup .planned{color:var(--faint);cursor:default}
     .navgroup .planned em{font-style:normal;font-family:var(--mono);font-size:.5625rem;
       border:1px solid var(--line);border-radius:999px;padding:1px 6px}
@@ -85,9 +114,12 @@
     .pagehead{padding:22px 0 4px}
     .pagehead p{color:var(--muted);margin:.2rem 0 0;max-width:70ch}
 
-    /* panels */
-    .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
-      padding:14px 16px;min-width:0}
+    /* panels — glass */
+    .panel{background:var(--glass-bg);backdrop-filter:blur(12px) saturate(140%);
+      -webkit-backdrop-filter:blur(12px) saturate(140%);
+      border:1px solid var(--line);border-radius:var(--r-lg);
+      box-shadow:0 20px 60px -34px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.05);
+      padding:15px 17px;min-width:0}
     .panelgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}
     .phead{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
       margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid var(--line)}
@@ -166,7 +198,7 @@
 </head>
 <body>
   <nav class="nav"><div class="wrap navin">
-    <a class="brand" href="/"><span class="livedot" aria-hidden="true"></span>RouteLens</a>
+    <a class="brand" href="/"><img src="/static/logo.svg" alt="" aria-hidden="true">RouteLens</a>
     <form class="navsearch" action="/q" method="get" role="search">
       <input type="search" name="query" placeholder="prefix / IP / ASN / hostname" aria-label="Query a prefix, IP, ASN or hostname"
              value="{{ request.args.get('query', '') if request.path == '/q' else '' }}">
