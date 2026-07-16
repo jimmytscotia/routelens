@@ -463,6 +463,17 @@ def create_app(config: dict | None = None) -> Flask:
             return (0, LINX_UK_ORDER.index(group))
         return (1, group)
 
+    @app.get("/dashboards/companies")
+    def dashboard_companies():
+        return render_template("dashboards/companies.html")
+
+    @app.get("/partials/dashboards/companies")
+    def partial_dashboard_companies():
+        from .companies import build_company_board
+
+        board = build_company_board(store, sources())
+        return render_template("partials/company_board.html", board=board)
+
     @app.get("/dashboards/weather")
     def dashboard_weather():
         from .weather import build_view, render_narrative

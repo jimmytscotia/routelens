@@ -1,0 +1,53 @@
+{% macro company_table(groups) %}
+  {% for group in groups %}
+  <section class="panel co-sec">
+    <header class="phead"><h2>{{ group.category }}</h2></header>
+    <div class="tablewrap">
+    <table class="datatable co-table">
+      <thead>
+        <tr>
+          <th style="width:22%">Service</th>
+          <th style="width:30%" title="Reported by the operator's own status page">Status</th>
+          <th title="Primary origin AS — click for the looking glass">Origin AS</th>
+          <th class="num" title="Prefixes announced by this operator's networks in the last 24h (RouteLens / RIPE RIS)">BGP announcements (24h)</th>
+          <th class="num" title="ROA coverage of the primary AS, when RouteLens has scored it">RPKI</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for c in group.companies %}
+        <tr>
+          <td class="co-name">{{ c.name }}</td>
+          <td>
+            <span class="st {{ c.state }}"><span class="dot"></span>{{ c.state }}</span>
+            {% if c.has_feed and c.detail %}<div class="co-detail">{{ c.detail }}</div>
+            {% elif not c.has_feed %}<div class="co-detail">no public status feed — BGP only</div>{% endif %}
+          </td>
+          <td class="mono">
+            {% if c.primary_asn %}<a href="/q?query=AS{{ c.primary_asn }}">AS{{ c.primary_asn }}</a>{% else %}—{% endif %}
+          </td>
+          <td class="num mono">{{ "{:,}".format(c.announcements) }}</td>
+          <td class="num co-rpki">
+            {% if c.rpki_coverage is not none %}
+              <span class="badge {{ 'healthy' if c.rpki_coverage >= 95 else ('warning' if c.rpki_coverage >= 50 else 'critical') }}">{{ c.rpki_coverage }}%</span>
+            {% else %}<span style="color:var(--faint)">—</span>{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+  {% endfor %}
+{% endmacro %}
+
+{{ company_table(board.global) }}
+
+{% if board.uk %}
+<div class="pagehead" style="padding:6px 0 2px"><h2 style="margin:0">United Kingdom</h2></div>
+{{ company_table(board.uk) }}
+{% endif %}
+
+<p class="attribution">Status from each operator's public status page (Statuspage / Google Cloud feeds;
+   others show BGP only until their adapter lands). BGP announcements and RPKI from RouteLens / RIPE RIS
+   and RouteViews. Status ≠ reachability: a green status page can coexist with a routing problem, and
+   vice-versa — that's why both signals are shown.</p>

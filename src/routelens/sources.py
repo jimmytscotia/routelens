@@ -475,6 +475,42 @@ class SourceClient:
             summarize=summarize,
         )
 
+    # ---- Company status feeds (health board) --------------------------------
+
+    def company_status(self, feed: dict | None) -> dict[str, Any]:
+        """Normalise a company's status feed to a common state vocabulary:
+        operational | degraded | outage | unknown. Cached and graceful."""
+        if not feed:
+            return {"ok": True, "data": {"state": "unknown", "detail": "no public status feed"}}
+        ftype, url = feed.get("type"), feed.get("url")
+
+        def summarize_statuspage(payload: dict) -> dict[str, Any]:
+            status = payload.get("status") or {}
+            indicator = status.get("indicator")
+            state = {"none": "operational", "minor": "degraded",
+                     "major": "outage", "critical": "outage"}.get(indicator, "unknown")
+            return {"state": state, "detail": status.get("description") or ""}
+
+        def summarize_gcp(payload: Any) -> dict[str, Any]:
+            incidents = payload if isinstance(payload, list) else []
+            ongoing = [i for i in incidents if not i.get("end")]
+            if not ongoing:
+                return {"state": "operational", "detail": "No active incidents"}
+            desc = ongoing[0].get("external_desc") or "Active incident"
+            return {"state": "outage", "detail": desc}
+
+        summarizer = {"statuspage": summarize_statuspage, "gcp": summarize_gcp}.get(ftype)
+        if summarizer is None:
+            return {"ok": True, "data": {"state": "unknown", "detail": "feed not yet supported"}}
+
+        result = self._cached_get(
+            f"status:{ftype}:{url}", url, max_age_seconds=600, summarize=summarizer,
+        )
+        if not result.get("ok"):
+            result.setdefault("data", {"state": "unknown", "detail": result.get("error", "unavailable")})
+            result["data"].setdefault("state", "unknown")
+        return result
+
     # ---- Outage & hijack feeds (Internet Weather) ---------------------------
 
     def ioda_alerts(self, *, window_s: int = 21600) -> dict[str, Any]:

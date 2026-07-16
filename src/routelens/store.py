@@ -427,6 +427,27 @@ class RouteLensStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def asn_announcements(self, asns: list[int], *, since: str) -> dict[int, int]:
+        """Announced-prefix totals since `since` for a set of ASNs. ASNs with
+        no activity are returned as 0 (kept in the result)."""
+        result = {asn: 0 for asn in asns}
+        if not asns:
+            return result
+        placeholders = ",".join("?" for _ in asns)
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT asn, COALESCE(SUM(announcements), 0) AS ann
+                  FROM ris_asn_activity
+                 WHERE bucket_ts >= ? AND asn IN ({placeholders})
+                 GROUP BY asn
+                """,
+                (since, *asns),
+            ).fetchall()
+        for row in rows:
+            result[row["asn"]] = row["ann"]
+        return result
+
     def prune_asn_activity(self, *, before: str) -> int:
         with self.connect() as conn:
             cur = conn.execute("DELETE FROM ris_asn_activity WHERE bucket_ts < ?", (before,))

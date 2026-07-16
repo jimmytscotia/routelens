@@ -361,3 +361,21 @@ def test_asn_profile_stats_unknown_asn(tmp_path):
     assert profile["transit_paths"] == 0
     assert profile["rpki"] is None
     assert profile["churn_series"] == []
+
+
+def test_asn_announcements_batch(tmp_path):
+    from routelens.store import RouteLensStore
+
+    store = RouteLensStore(tmp_path / "batch.db")
+    store.init_schema()
+    store.record_asn_bucket(bucket_ts="2026-07-16T10:00:00", asn=13335, updates=50, announcements=120)
+    store.record_asn_bucket(bucket_ts="2026-07-16T11:00:00", asn=13335, updates=30, announcements=80)
+    store.record_asn_bucket(bucket_ts="2026-07-16T10:00:00", asn=15169, updates=10, announcements=40)
+    # Older than the window: excluded.
+    store.record_asn_bucket(bucket_ts="2026-07-15T00:00:00", asn=13335, updates=999, announcements=999)
+
+    got = store.asn_announcements([13335, 15169, 64500], since="2026-07-16T00:00:00")
+
+    assert got[13335] == 200
+    assert got[15169] == 40
+    assert got[64500] == 0        # no activity -> zero, still present

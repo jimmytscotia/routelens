@@ -643,3 +643,39 @@ def test_weather_narrative_is_in_a_modal_and_tables_are_constrained(tmp_path):
     # Evidence tables are constrained so long content can't overflow the panel.
     assert "wx-evidence" in body
     assert "table-layout:fixed" in body
+
+
+def test_companies_page_shell_and_sidebar(tmp_path):
+    client = _app(tmp_path).test_client()
+
+    body = client.get("/dashboards/companies").data.decode()
+    assert "Service health" in body or "Company health" in body
+    assert "/partials/dashboards/companies" in body
+    # Sidebar links to it.
+    assert '/dashboards/companies' in client.get("/dashboards/collectors").data.decode()
+
+
+def test_companies_partial_renders_status_and_bgp(tmp_path):
+    app = _app(tmp_path)
+    store = app.config["ROUTELENS_STORE"]
+    store.upsert_asn_names([(13335, "Cloudflare", "US")])
+    store.record_asn_bucket(bucket_ts=_hour_bucket(0), asn=13335, updates=50, announcements=120)
+
+    class FakeSources:
+        def company_status(self, feed):
+            if feed and "cloudflare" in feed.get("url", ""):
+                return {"ok": True, "data": {"state": "operational", "detail": "All Systems Operational"}}
+            return {"ok": True, "data": {"state": "unknown", "detail": "no public status feed"}}
+
+    app.config["ROUTELENS_SOURCES"] = FakeSources()
+    body = app.test_client().get("/partials/dashboards/companies").data.decode()
+
+    assert "Cloudflare" in body
+    assert "operational" in body
+    # UK section present with its own heading.
+    assert "United Kingdom" in body or "UK" in body
+    assert "BT / EE" in body
+    # Company ASNs drill into the looking glass.
+    assert "/q?query=AS13335" in body
+    # No-feed companies are shown honestly.
+    assert "Netflix" in body

@@ -717,3 +717,61 @@ def test_radar_outages_token_gated(store, monkeypatch):
     assert out["locations"] == ["SD"]
     assert out["cause"] == "POWER_OUTAGE"
     assert out["scope"] == "NATIONWIDE"
+
+
+def test_company_status_statuspage_normalises_indicator(store, monkeypatch):
+    payloads = {
+        "none": {"status": {"indicator": "none", "description": "All Systems Operational"}},
+        "minor": {"status": {"indicator": "minor", "description": "Minor Service Outage"}},
+        "critical": {"status": {"indicator": "critical", "description": "Major Outage"}},
+    }
+
+    def make(ind):
+        monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse(payloads[ind]))
+        return SourceClient(store).company_status({"type": "statuspage", "url": f"https://x/{ind}"})
+
+    ok = make("none")
+    assert ok["ok"] and ok["data"]["state"] == "operational"
+    assert make("minor")["data"]["state"] == "degraded"
+    crit = make("critical")
+    assert crit["data"]["state"] == "outage"
+    assert crit["data"]["detail"] == "Major Outage"
+
+
+def test_company_status_gcp_flags_ongoing_incidents(store, monkeypatch):
+    # One resolved (has end) + one ongoing (end is null) -> outage.
+    payload = [
+        {"id": "a", "external_desc": "Resolved thing", "begin": "2026-07-15T00:00:00+00:00",
+         "end": "2026-07-15T02:00:00+00:00", "affected_products": [{"title": "Compute"}]},
+        {"id": "b", "external_desc": "Ongoing networking issue", "begin": "2026-07-16T10:00:00+00:00",
+         "end": None, "affected_products": [{"title": "Networking"}]},
+    ]
+    monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse(payload))
+
+    result = SourceClient(store).company_status({"type": "gcp", "url": "https://x"})
+
+    assert result["ok"] is True
+    assert result["data"]["state"] == "outage"
+    assert "Ongoing networking issue" in result["data"]["detail"]
+
+
+def test_company_status_gcp_all_resolved_is_operational(store, monkeypatch):
+    payload = [{"id": "a", "external_desc": "old", "begin": "x", "end": "2026-07-15T02:00:00+00:00",
+                "affected_products": []}]
+    monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse(payload))
+
+    result = SourceClient(store).company_status({"type": "gcp", "url": "https://x"})
+
+    assert result["data"]["state"] == "operational"
+
+
+def test_company_status_none_and_error(store, monkeypatch):
+    # No feed configured.
+    assert SourceClient(store).company_status(None)["data"]["state"] == "unknown"
+
+    # Fetch failure degrades to unknown, not a raise.
+    def boom(url, **kw):
+        raise sources.requests.ConnectionError("down")
+    monkeypatch.setattr(sources.requests, "get", boom)
+    res = SourceClient(store).company_status({"type": "statuspage", "url": "https://x"})
+    assert res["ok"] is False and res["data"]["state"] == "unknown"

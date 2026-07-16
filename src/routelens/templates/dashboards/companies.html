@@ -1,0 +1,31 @@
+{% extends "dashboards/_layout.html" %}
+{% block title %}Service health · RouteLens{% endblock %}
+{% block dashboard %}
+  <div class="pagehead" style="padding-top:0">
+    <h1>Service health</h1>
+    <p>Major Internet and IT services — global and UK — with two independent signals: what each
+       operator's <em>status page</em> reports, and what the <em>routing table</em> says about its
+       networks (RouteLens's own live BGP data). Companies with no public status feed still show
+       their BGP footprint.</p>
+  </div>
+  <div id="companyboard"
+       hx-get="/partials/dashboards/companies"
+       hx-trigger="load"
+       hx-swap="innerHTML">
+    <section class="panel"><p class="loading">Checking status feeds…</p></section>
+  </div>
+<style>
+  .co-table{width:100%;table-layout:fixed}
+  .co-table td{overflow-wrap:anywhere;vertical-align:top}
+  .co-name{font-weight:500}
+  .st{display:inline-flex;align-items:center;gap:6px;font-size:.75rem;white-space:nowrap}
+  .st .dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--faint)}
+  .st.operational .dot{background:var(--ok)} .st.degraded .dot{background:var(--warn)}
+  .st.outage .dot{background:var(--crit)} .st.unknown .dot{background:var(--faint)}
+  .st.operational{color:var(--ok)} .st.degraded{color:var(--warn)} .st.outage{color:var(--crit)}
+  .st.unknown{color:var(--faint)}
+  .co-detail{color:var(--muted);font-size:.6875rem}
+  .co-sec h2{font-size:.9375rem;margin:0 0 2px}
+  .co-rpki{font-family:var(--mono);font-size:.6875rem}
+</style>
+{% endblock %}

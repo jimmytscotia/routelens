@@ -51,4 +51,10 @@ def nav() -> list[dict]:
                 _dash("asn-profiles"), _dash("table-growth"),
             ],
         },
+        {
+            "category": "Services",
+            "items": [
+                {"title": "Service health", "url": "/dashboards/companies", "status": "live"},
+            ],
+        },
     ]

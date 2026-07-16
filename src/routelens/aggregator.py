@@ -317,7 +317,9 @@ async def run(store: RouteLensStore) -> None:
                             "%Y-%m-%dT%H:%M:%S"
                         )
                         churners = [row["asn"] for row in store.asn_league(since=day_ago, limit=10)]
-                        targets = list(dict.fromkeys(UK_OPERATORS + churners))
+                        from .companies import all_company_asns
+
+                        targets = list(dict.fromkeys(UK_OPERATORS + all_company_asns() + churners))
 
                         def _score(asns=targets) -> None:
                             try:
