@@ -1,6 +1,6 @@
 # RouteLens
 
-RouteLens is a Flask/Jinja/SQLite network-health dashboard for the NextHop Lab blog demo. It compares public DNS, private lab DNS, HTTP health, TLS certificate posture, and RIPEstat BGP visibility, then renders a polished dark operations dashboard.
+RouteLens is a Flask/Jinja/SQLite live network observability tool for a technical audience interested in investigating the live status of core parts of the Internet. It streams real-time BGP activity, offers a multi-source looking glass for any prefix/IP/ASN/hostname, and renders a dense, dark operations dashboard.
 
 ## Deployment
 
@@ -89,13 +89,13 @@ Expected:
 3. Add DNS public/private comparison panels.
 4. Add a safe “run checks now” UI button or authenticated admin route.
 5. ~~Deployment automation to svc-01~~ — obsolete; Coolify push-to-deploy replaced it.
-6. Polish responsive UI and take blog-ready screenshots.
+6. Polish responsive UI and take product screenshots.
 7. Add GitHub Actions CI (repo is on GitHub; run `pytest` on PRs before merge to `dev`/`main`).
 
 ## Guardrails
 
 - Do not commit secrets or real `.env` files.
 - Do not touch Karen tenancy.
-- Do not modify Proxmox host/VM infrastructure unless Jim explicitly asks.
+- Do not modify Proxmox host/VM infrastructure unless the admin explicitly asks.
 - RouteLens can safely read public APIs and lab service endpoints.
 - Keep `nexthop.engineer` public apex pointing at `66.241.124.199`.

@@ -4,7 +4,7 @@ You are developing **RouteLens**, a NextHop Lab network observability demo app.
 
 ## Product intent
 
-RouteLens should be a credible network-engineering dashboard, not a toy demo. It watches public DNS, private split-DNS, HTTP reachability, TLS certificates, and RIPEstat BGP visibility, then presents operationally useful insight for a blog/demo.
+RouteLens should be a credible network-engineering dashboard, not a toy demo. It watches public DNS, private split-DNS, HTTP reachability, TLS certificates, and RIPEstat BGP visibility, then presents operationally useful insight for a technical audience investigating the live status of core parts of the Internet.
 
 Visual target: polished Torc/Framer-inspired dark product aesthetic:
 
@@ -26,7 +26,7 @@ Visual target: polished Torc/Framer-inspired dark product aesthetic:
 - Jinja templates: `src/routelens/templates/`
 - Tests: `tests/`
 
-Use stdlib SQLite for the MVP. Do not introduce SQLAlchemy/Postgres unless Jim explicitly asks.
+Use stdlib SQLite for the MVP. Do not introduce SQLAlchemy/Postgres unless the admin explicitly asks.
 
 ## Commands
 
@@ -67,7 +67,7 @@ steps). ALL operational specifics — hosts, app/volume names, schedules, URLs,
 auth, backup posture — live in `docs/private/deployment-vps-01.md`, which is
 **gitignored because this repo is PUBLIC**. Read it at session start; never
 copy its contents into tracked files. The platform side is owned by the
-vps-platform session; infra changes go through Jim.
+vps-platform session; infra changes go through the admin.
 
 Contract for this repo: do not rename the Dockerfile targets (`web`,
 `aggregator`) or the gunicorn entrypoint (`routelens.app:create_app()`), and
@@ -77,11 +77,11 @@ never commit DB files or secrets — deploys build straight from this repo.
 
 - Never commit secrets, tokens, `.env`, private keys, or live DB files.
 - Do not touch Karen tenancy.
-- Do not modify Proxmox/VM/DNS/TLS infrastructure unless Jim explicitly asks.
+- Do not modify Proxmox/VM/DNS/TLS infrastructure unless the admin explicitly asks.
 - Keep public `nexthop.engineer` apex resolving to `66.241.124.199`.
 - For deployment changes, produce a test plan and rollback notes before applying.
 
-## RouteLens 2.0 direction (agreed with Jim, 2026-07-14)
+## RouteLens 2.0 direction (agreed with the admin, 2026-07-14)
 
 RouteLens pivoted from a static lab status page to a live "routing observatory":
 
@@ -98,7 +98,7 @@ RouteLens pivoted from a static lab status page to a live "routing observatory":
 
 ## Approved dashboard roadmap (build one at a time, in order)
 
-All ten approved by Jim 2026-07-14. Most need the **RIS Live aggregator**
+All ten approved by the admin 2026-07-14. Most need the **RIS Live aggregator**
 (server-side stream consumer writing per-minute buckets to SQLite) — build it
 with #1 and reuse it everywhere:
 
@@ -130,7 +130,7 @@ routelens.service (web), routelens-aggregator.service (RIS Live stream),
 routelens-spacescan.timer (daily bgp.tools table ingest) — plus the original
 routelens-collector.timer.
 
-## UK / LINX focus (Jim, 2026-07-14)
+## UK / LINX focus (the admin, 2026-07-14)
 
 Add a UK lens using LINX's public Alice-LG looking glasses (standard Alice REST
 API, no auth — `/api/v1/status`, `/api/v1/routeservers`,
@@ -143,7 +143,7 @@ API, no auth — `/api/v1/status`, `/api/v1/routeservers`,
   — NB COLLECTOR.MOM1 is Mombasa, NOT Manchester; earlier note was wrong)
 - `*-center3.linx.net` hosts are LINX Middle East (JED1/RIY1), not UK.
 
-CURRENT SHAPE (2026-07-16, redesigned with Jim — the earlier /dashboards/linx
+CURRENT SHAPE (2026-07-16, redesigned with the admin — the earlier /dashboards/linx
 page and "United Kingdom" sidebar category were removed):
 - Collector league: LINX presence via the RIS collector hosted at LINX
   (rrc01 London — the only UK/LINX RIS collector), tagged from the
@@ -156,8 +156,8 @@ page and "United Kingdom" sidebar category were removed):
 - /q landing: "UK exchanges via LINX route servers" strip, Scotland first.
 - Prefix pages: "LINX view" panel (cross-exchange lookup) unchanged.
 - Route servers only see RS-peering members — absence ≠ not at LINX.
-- STANDING BRIEF from Jim: Scotland keeps a visible, data-backed place on
-  the map and the site — he's promoting Scotland's Internet presence.
+- STANDING BRIEF from the admin: Scotland keeps a visible, data-backed place
+  on the map and the site — the project promotes Scotland's Internet presence.
 
 ## Publishing status
 

@@ -6,11 +6,11 @@ product
 
 ## Users
 
-Primary: readers of the NextHop Lab blog — recruiters, prospective clients, and fellow network engineers — arriving from a blog post to evaluate Jim's engineering credibility. They judge in the first thirty seconds: is this a real operator's tool or a toy demo? Secondary: Jim himself, using it as a genuine lab looking-glass.
+A technical audience — network engineers, NOC and infrastructure people, researchers, and the professionally curious — interested in investigating the live status of core parts of the Internet: global BGP activity, routing stability, RPKI posture, exchange points, and the health of specific prefixes, ASNs, and hostnames. They judge in the first thirty seconds: is this a real operator's tool or a toy demo? Secondary: the admin, using it as a genuine looking-glass.
 
 ## Product Purpose
 
-RouteLens is a live network observability tool: it streams real-time BGP updates from RIPE RIS collectors worldwide, answers ad-hoc queries about any prefix/IP/ASN/hostname via multiple independent data sources (RIPEstat, RouteViews, NLNOG Ring, Globalping, Cloudflare Radar), and continuously watches the NextHop Lab's own resources. Success = a network engineer looks at it and immediately recognises operational competence; a recruiter sees a credible, alive product rather than a portfolio stub.
+RouteLens is a live network observability tool: it streams real-time BGP updates from RIPE RIS collectors worldwide, answers ad-hoc queries about any prefix/IP/ASN/hostname via multiple independent data sources (RIPEstat, RouteViews, NLNOG Ring, Globalping, Cloudflare Radar), and continuously watches its own operator's resources. Success = a network engineer looks at it and immediately recognises operational competence — a credible, alive instrument for inspecting the Internet's core, not a portfolio stub.
 
 ## Brand Personality
 

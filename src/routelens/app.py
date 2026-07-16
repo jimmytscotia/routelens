@@ -82,7 +82,7 @@ def create_app(config: dict | None = None) -> Flask:
 
         return jsonify({"collectors": ACTIVE_COLLECTORS})
 
-    # Watchlist UI removed for now (2026-07-14, Jim's call). The collector,
+    # Watchlist UI removed for now (2026-07-14, the admin's call). The collector,
     # store and resource-detail pages stay; only the listing page is gone.
     @app.get("/resources/<int:resource_id>")
     def resource_detail(resource_id: int):
@@ -454,7 +454,7 @@ def create_app(config: dict | None = None) -> Flask:
         ]
         return jsonify({"origin_changes": origin_changes, "flaps": flaps})
 
-    # UK LANs lead, Scotland pinned first (Jim's ask); international follow.
+    # UK LANs lead, Scotland pinned first (standing product brief); international follow.
     LINX_UK_ORDER = ["LINX Scotland", "LINX LON1", "LINX LON2", "LINX Manchester", "LINX Wales"]
 
     def _linx_exchange_sort_key(exchange: dict):
