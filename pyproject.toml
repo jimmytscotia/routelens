@@ -9,7 +9,7 @@ dependencies = [
   "requests>=2.32",
   "gunicorn>=22.0",
   "websockets>=16.1",
-  "mistralai>=2.6.0",
+  "mistralai>=2.6.0,<3",
 ]
 
 [project.scripts]

@@ -21,7 +21,10 @@ WEATHER_SCHEMA = {
     "json_schema": {
         "name": "internet_weather",
         "strict": True,
-        "schema": {
+        # The 2.x mistralai SDK names this key `schema_definition`, not `schema`
+        # (the raw REST field). A mismatch is silently ignored, disabling
+        # structured output — see test_weather_schema_matches_installed_sdk.
+        "schema_definition": {
             "type": "object",
             "properties": {
                 "headline": {"type": "string"},
@@ -65,6 +68,16 @@ mention it. Attribute external data briefly (IODA, GRIP, Cloudflare Radar) \
 where you rely on it."""
 
 
+def _import_mistral():
+    """The Mistral client class. SDK 2.x moved it to `mistralai.client`;
+    1.x exposed it at the top level. Try 2.x first, fall back."""
+    try:
+        from mistralai.client import Mistral  # SDK 2.x
+    except ImportError:  # pragma: no cover - 1.x fallback
+        from mistralai import Mistral
+    return Mistral
+
+
 class WeatherAI:
     def __init__(self, client: Any, model: str = MODEL):
         self._client = client
@@ -75,9 +88,7 @@ class WeatherAI:
         key = os.environ.get("MISTRAL_API_KEY")
         if not key:
             return None
-        from mistralai import Mistral
-
-        return cls(Mistral(api_key=key))
+        return cls(_import_mistral()(api_key=key))
 
     def summarize(self, evidence: dict[str, Any]) -> dict[str, Any]:
         response = self._client.chat.complete(

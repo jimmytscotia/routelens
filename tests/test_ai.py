@@ -38,6 +38,29 @@ def test_from_env_returns_none_without_key(monkeypatch):
     assert WeatherAI.from_env() is None
 
 
+def test_sdk_import_path_and_client_construction():
+    """Contract test against the actually-installed mistralai SDK — the real
+    boundary the mocked tests can't reach. Guards the import path and that a
+    client constructs (no network)."""
+    from routelens.ai import _import_mistral
+
+    Mistral = _import_mistral()
+    client = Mistral(api_key="sk-fake-not-real")
+    assert hasattr(client, "chat") and hasattr(client.chat, "complete")
+
+
+def test_weather_schema_matches_installed_sdk_contract():
+    """The 2.x SDK expects `schema_definition`, not `schema`; a mismatch is
+    silently ignored and disables structured output. Assert the corrected key
+    and that the SDK accepts the whole response_format."""
+    from mistralai.client.models.responseformat import ResponseFormat
+
+    js = WEATHER_SCHEMA["json_schema"]
+    assert "schema_definition" in js and "schema" not in js
+    # Validates against the SDK's own model (raises on a wrong shape).
+    ResponseFormat.model_validate(WEATHER_SCHEMA)
+
+
 def test_summarize_calls_model_with_schema_and_parses_json():
     client = FakeClient(json.dumps({
         "headline": "Squall over Sudan", "severity": "minor",

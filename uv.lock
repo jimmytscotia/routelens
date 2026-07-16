@@ -714,7 +714,7 @@ requires-dist = [
     { name = "dnspython", specifier = ">=2.6" },
     { name = "flask", specifier = ">=3.0" },
     { name = "gunicorn", specifier = ">=22.0" },
-    { name = "mistralai", specifier = ">=2.6.0" },
+    { name = "mistralai", specifier = ">=2.6.0,<3" },
     { name = "requests", specifier = ">=2.32" },
     { name = "websockets", specifier = ">=16.1" },
 ]
