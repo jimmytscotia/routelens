@@ -1,8 +1,13 @@
 [project]
 name = "routelens"
 version = "0.1.0"
-description = "BGP, DNS and route health dashboard for NextHop Lab"
+description = "Live network observability tool for the Internet's core routing"
 requires-python = ">=3.11"
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Framework :: Flask",
+]
 dependencies = [
   "flask>=3.0",
   "dnspython>=2.6",

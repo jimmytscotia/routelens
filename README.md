@@ -99,3 +99,16 @@ Expected:
 - Do not modify Proxmox host/VM infrastructure unless the admin explicitly asks.
 - RouteLens can safely read public APIs and lab service endpoints.
 - Keep `nexthop.engineer` public apex pointing at `66.241.124.199`.
+
+## License
+
+RouteLens source code is released under the **MIT License** — see [`LICENSE`](LICENSE).
+
+Two caveats, detailed in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md):
+
+- The **"RouteLens" name and logo are not covered** by the MIT licence (all
+  rights reserved). Fork the code freely; use your own name and mark.
+- The app relies on **third-party data sources with their own terms**. The code
+  licence does not grant rights to that data. In particular, **Cloudflare Radar
+  data is CC BY-NC (non-commercial)** and **IODA/GRIP are for academic/
+  educational use** — review the notices before any commercial deployment.

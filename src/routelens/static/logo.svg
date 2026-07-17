@@ -1,12 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="RouteLens">
   <rect width="200" height="200" rx="44" fill="#070B14"/>
   <defs>
-    <linearGradient id="g" x1="52" y1="34" x2="150" y2="176" gradientUnits="userSpaceOnUse">
+    <linearGradient id="g" x1="44" y1="44" x2="156" y2="156" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#F6E1A6"/><stop offset=".5" stop-color="#E7C877"/><stop offset="1" stop-color="#9C7530"/>
     </linearGradient>
   </defs>
-  <circle cx="100" cy="100" r="60" fill="none" stroke="url(#g)" stroke-width="9" stroke-linecap="round" stroke-dasharray="340 38" transform="rotate(108 100 100)"/>
-  <circle cx="100" cy="100" r="12" fill="#0b1120" stroke="#E7C877" stroke-width="4"/>
-  <circle cx="118" cy="156" r="9.5" fill="#0b1120" stroke="#E7C877" stroke-width="4"/>
-  <circle cx="82" cy="156" r="9.5" fill="#0b1120" stroke="#E7C877" stroke-width="4"/>
+  <!-- lens aperture -->
+  <circle cx="100" cy="100" r="58" fill="none" stroke="url(#g)" stroke-width="7" opacity=".5"/>
+  <!-- route path through three node hops -->
+  <path d="M58 142 L100 100 L142 58" fill="none" stroke="url(#g)" stroke-width="9"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="58" cy="142" r="11" fill="#070B14" stroke="url(#g)" stroke-width="6"/>
+  <circle cx="100" cy="100" r="12.5" fill="url(#g)"/>
+  <circle cx="142" cy="58" r="11" fill="#070B14" stroke="url(#g)" stroke-width="6"/>
 </svg>
