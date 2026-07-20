@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ raw or 'Query' }} · RouteLens{% endblock %}
+{% block description %}{% if raw %}Live routing and looking-glass analysis for {{ raw }} across RIPEstat, RouteViews, NLNOG Ring, LINX and more.{% else %}Query any prefix, IP, ASN or hostname and see its live routing across multiple independent looking glasses — RIPEstat, RouteViews, NLNOG Ring, LINX and Globalping.{% endif %}{% endblock %}
 {% block body %}
 <main class="wrap">
 {% if kind == 'invalid' %}

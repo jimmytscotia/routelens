@@ -54,6 +54,7 @@ def create_app(config: dict | None = None) -> Flask:
     app.config.update(
         DATABASE=os.environ.get("ROUTELENS_DATABASE", str(Path(app.instance_path) / "routelens.db")),
         RESOLVER=_default_resolver,
+        CLOUDFLARE_ANALYTICS_TOKEN=os.environ.get("CLOUDFLARE_ANALYTICS_TOKEN", ""),
     )
     if config:
         app.config.update(config)
@@ -75,6 +76,31 @@ def create_app(config: dict | None = None) -> Flask:
     @app.get("/healthz")
     def healthz():
         return jsonify({"status": "ok", "service": "routelens"})
+
+    # Public, crawlable surfaces only — the /partials/* HTMX fragments and
+    # /api/* endpoints are intentionally left out of the sitemap.
+    SITEMAP_PATHS = ["/", "/q", "/dashboards/", "/dashboards/weather", "/about"]
+
+    @app.get("/robots.txt")
+    def robots_txt():
+        from flask import Response, url_for
+
+        sitemap = url_for("sitemap_xml", _external=True)
+        body = f"User-agent: *\nAllow: /\nSitemap: {sitemap}\n"
+        return Response(body, mimetype="text/plain")
+
+    @app.get("/sitemap.xml")
+    def sitemap_xml():
+        from flask import Response
+
+        root = request.url_root.rstrip("/")
+        urls = "".join(f"  <url><loc>{root}{p}</loc></url>\n" for p in SITEMAP_PATHS)
+        body = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+            f"{urls}</urlset>\n"
+        )
+        return Response(body, mimetype="application/xml")
 
     @app.get("/")
     def pulse():

@@ -1,5 +1,27 @@
 {% extends "base.html" %}
 {% block title %}RouteLens · live BGP pulse{% endblock %}
+{% block description %}Watch the global BGP routing table update live. RouteLens streams real-time announcements and withdrawals from RIPE RIS collectors worldwide on a dark operations map, with a multi-source looking glass for any prefix, IP, ASN or hostname.{% endblock %}
+{% block structured_data %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "RouteLens",
+  "url": "{{ request.url_root }}",
+  "applicationCategory": "https://schema.org/DeveloperApplication",
+  "operatingSystem": "Any (web-based)",
+  "description": "A live BGP looking glass and routing observatory: streams the global routing table in real time and answers ad-hoc queries about any prefix, IP, ASN or hostname across multiple independent data sources.",
+  "featureList": [
+    "Live BGP stream from RIPE RIS collectors",
+    "Multi-source looking glass (RIPEstat, RouteViews, NLNOG Ring, Globalping, Cloudflare Radar)",
+    "RPKI validation scoreboard",
+    "Prefix flap, origin-change and transit dashboards",
+    "AI Internet Weather briefing"
+  ],
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "GBP" }
+}
+</script>
+{% endblock %}
 {% block extra_head %}
 {# Leaflet, not MapLibre: MapLibre requires WebGL, which is unavailable in
    some environments (GPU acceleration off, remote desktops). Leaflet renders

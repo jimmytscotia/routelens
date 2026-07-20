@@ -31,4 +31,4 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 
 [tool.setuptools.package-data]
-routelens = ["templates/*.html", "templates/partials/*.html", "templates/dashboards/*.html", "static/*.geojson", "static/*.svg", "static/fonts/*.woff2"]
+routelens = ["templates/*.html", "templates/partials/*.html", "templates/dashboards/*.html", "static/*.geojson", "static/*.svg", "static/*.png", "static/fonts/*.woff2"]
