@@ -263,7 +263,7 @@
   .sev-dot.sev-calm{background:var(--ok)} .sev-dot.sev-minor,.sev-dot.sev-notable{background:var(--warn)}
   .sev-dot.sev-severe{background:var(--crit)}
   .leaflet-container{background:var(--inset)}
-  .leaflet-control-attribution{background:rgba(11,14,19,.75)!important;color:var(--faint)!important;font-size:.5625rem}
+  .leaflet-control-attribution{background:color-mix(in srgb,var(--surface) 82%,transparent)!important;color:var(--faint)!important;font-size:.5625rem}
   .wx-hotdot{border-radius:50%;background:#f0c249;border:1px solid #ffe9a8}
   .wx-outring{border-radius:50%;background:rgba(255,93,110,.5);border:2px solid #ff5d6e}
 </style>
@@ -273,11 +273,20 @@
   const el = document.getElementById('wx-map');
   if (!el) return;
   const data = JSON.parse(el.dataset.map);
+  let wxMap = null, wxTiles = null;
+  const isLight = () => document.documentElement.getAttribute('data-theme') === 'light';
+  function addWxBasemap() {
+    if (wxTiles) wxMap.removeLayer(wxTiles);
+    const style = isLight() ? 'light_nolabels' : 'dark_nolabels';
+    wxTiles = L.tileLayer(`https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}@2x.png`,
+      {subdomains: 'abcd', attribution: '&copy; OpenStreetMap &copy; CARTO'}).addTo(wxMap);
+  }
+  window.addEventListener('rl:themechange', () => { if (wxMap) addWxBasemap(); });
   function draw() {
     if (typeof L === 'undefined') { el.innerHTML = '<p class="err" style="padding:12px">Map unavailable (Leaflet blocked).</p>'; return; }
     const map = L.map('wx-map', {center: [25, 10], zoom: 1.5, minZoom: 1, maxZoom: 6, zoomSnap: 0.5, worldCopyJump: true});
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}@2x.png',
-      {subdomains: 'abcd', attribution: '&copy; OpenStreetMap &copy; CARTO'}).addTo(map);
+    wxMap = map;
+    addWxBasemap();
     fetch('/static/world.geojson').then(r => r.json()).then(geo => {
       const cen = {};
       for (const f of geo.features) cen[f.properties.iso2] = L.geoJSON(f).getBounds().getCenter();

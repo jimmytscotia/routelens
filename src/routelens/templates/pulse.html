@@ -52,13 +52,13 @@
   .mapbar .lyr.active{color:var(--ink);border-color:var(--accent)}
   .mapbar .note{margin-left:auto;font-family:var(--mono);font-size:.625rem;color:var(--faint)}
   #uk-btn{margin-left:8px}
-  #map-legend{position:absolute;bottom:22px;left:10px;z-index:800;background:rgba(11,14,19,.85);
+  #map-legend{position:absolute;bottom:22px;left:10px;z-index:800;background:color-mix(in srgb,var(--surface) 88%,transparent);
     border:1px solid var(--line);border-radius:var(--r);padding:6px 10px;
     font-family:var(--mono);font-size:.625rem;color:var(--muted);display:none}
   #map-legend .sw{display:inline-block;width:10px;height:10px;border-radius:2px;
     vertical-align:-1px;margin-right:4px}
   .leaflet-container{background:var(--inset);font:inherit}
-  .leaflet-control-attribution{background:rgba(11,14,19,.75)!important;color:var(--faint)!important;font-size:.625rem}
+  .leaflet-control-attribution{background:color-mix(in srgb,var(--surface) 82%,transparent)!important;color:var(--faint)!important;font-size:.625rem}
   .leaflet-control-attribution a{color:var(--muted)!important}
   .leaflet-bar a{background:var(--surface)!important;color:var(--ink)!important;border-color:var(--line)!important}
   .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--surface);color:var(--ink);
@@ -159,9 +159,18 @@
   const $ = id => document.getElementById(id);
 
   // ---- map ------------------------------------------------------------------
-  let map = null, world = null, centroids = {};
+  let map = null, world = null, centroids = {}, tiles = null;
   const layers = {collectors: null, churn: null, events: null};
   let activeLayer = 'collectors';
+  const isLight = () => document.documentElement.getAttribute('data-theme') === 'light';
+  function addBasemap() {
+    if (tiles) map.removeLayer(tiles);
+    const style = isLight() ? 'light_nolabels' : 'dark_nolabels';
+    tiles = L.tileLayer(`https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}@2x.png`, {
+      subdomains: 'abcd', tileSize: 256,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    }).addTo(map);
+  }
   const NOTES = {
     collectors: 'collector load · last hour',
     churn: 'churn intensity by country · last 6h',
@@ -183,10 +192,12 @@
       center: [25, 10], zoom: 2, minZoom: 1, maxZoom: 8,
       zoomSnap: 0.5, worldCopyJump: true,
     });
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}@2x.png', {
-      subdomains: 'abcd', tileSize: 256,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    }).addTo(map);
+    addBasemap();
+    // Theme switch: swap the light/dark basemap and re-tint the choropleth.
+    window.addEventListener('rl:themechange', () => {
+      addBasemap();
+      refreshActiveLayer();
+    });
     $('uk-btn').addEventListener('click', () => map.setView([54.5, -3.4], 5));
     document.querySelectorAll('.mapbar .lyr').forEach(btn => {
       btn.addEventListener('click', () => switchLayer(btn.dataset.layer, btn));
@@ -303,9 +314,9 @@
           style: f => {
             const row = byIso[f.properties.iso2];
             return {
-              weight: 0.6, color: '#43597d',
-              fillColor: row ? bucketColor(row.intensity) : '#182338',
-              fillOpacity: row ? 0.78 : 0.15,
+              weight: 0.6, color: isLight() ? '#9fb0c8' : '#43597d',
+              fillColor: row ? bucketColor(row.intensity) : (isLight() ? '#cdd8e8' : '#182338'),
+              fillOpacity: row ? 0.78 : (isLight() ? 0.35 : 0.15),
             };
           },
           onEachFeature: (f, layer) => {

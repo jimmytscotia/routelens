@@ -3,6 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script>
+    /* No-flash theme: resolve and set data-theme before first paint.
+       Preference 'auto' follows the OS; 'dark'/'light' are explicit. */
+    (function () {
+      try {
+        var p = localStorage.getItem('rl-theme') || 'auto';
+        var t = p === 'auto'
+          ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+          : p;
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
   <title>{% block title %}RouteLens · live BGP looking glass{% endblock %}</title>
   <meta name="description" content="{% block description %}RouteLens is a live BGP looking glass and routing observatory: stream the global routing table in real time, query any prefix, IP, ASN or hostname, and watch RPKI, outages, transit and the health of the Internet's core.{% endblock %}">
   <link rel="canonical" href="{{ request.base_url }}">
@@ -49,10 +64,27 @@
       --ok:#3fd68f; --warn:#f0c249; --crit:#ff5d6e;
       /* glass */
       --glass-bg:rgba(255,255,255,.07); --glass-bg-strong:rgba(255,255,255,.1);
+      --nav-bg:rgba(7,11,20,.72);
+      --panel-shadow:0 20px 60px -34px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.05);
       --r:9px; --r-lg:16px;
       --z-nav:10; --z-tip:20;
       --font-display:'Clash Display',system-ui,sans-serif;
       --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    }
+    /* Light theme — cool off-white canvas, frosted-white glass, deeper gold and
+       darkened state colours so everything reads on a light background. Only the
+       tokens change; every component follows. */
+    :root[data-theme="light"]{
+      color-scheme:light;
+      --bg:#EDF1F7; --surface:#FFFFFF; --surface2:#F4F7FB; --inset:#E7EDF5;
+      --line:rgba(16,26,46,.13); --line-strong:rgba(16,26,46,.22);
+      --ink:#111A2A; --muted:#48566E; --faint:#6B7A93;
+      --accent:#2B5AE0; --accent-ink:#1E52C8;
+      --gold:#AA8329; --gold-bright:#C79A34; --gold-deep:#8A6B22;
+      --ok:#12925C; --warn:#B07908; --crit:#D62B43;
+      --glass-bg:rgba(255,255,255,.72); --glass-bg-strong:rgba(255,255,255,.85);
+      --nav-bg:rgba(247,250,253,.72);
+      --panel-shadow:0 18px 50px -34px rgba(30,45,75,.35),inset 0 1px 0 rgba(255,255,255,.7);
     }
     *{box-sizing:border-box}
     html{font-size:16px}
@@ -71,9 +103,10 @@
        Weather); markers, choropleths and popups sit on other panes, untouched.
        In light mode this filter is dropped and a light basemap is used. */
     .leaflet-tile-pane{filter:brightness(1.55) contrast(1.08)}
+    :root[data-theme="light"] .leaflet-tile-pane{filter:none}
     a{color:var(--accent-ink);text-decoration:none}
     a:hover{text-decoration:underline}
-    ::selection{background:rgba(231,200,119,.26);color:#fff}
+    ::selection{background:rgba(231,200,119,.26);color:var(--ink)}
     :focus-visible{outline:2px solid var(--gold-bright);outline-offset:2px;border-radius:6px}
     h1{font-family:var(--font-display);font-size:1.6rem;font-weight:600;letter-spacing:-.03em;margin:0 0 .35rem;text-wrap:balance}
     h2{font-family:var(--font-display);font-size:1.05rem;font-weight:600;letter-spacing:-.02em;margin:0}
@@ -83,7 +116,7 @@
 
     /* top bar — glass */
     .nav{position:sticky;top:0;z-index:var(--z-nav);
-      background:rgba(7,11,20,.72);backdrop-filter:blur(14px) saturate(150%);
+      background:var(--nav-bg);backdrop-filter:blur(14px) saturate(150%);
       -webkit-backdrop-filter:blur(14px) saturate(150%);
       border-bottom:1px solid var(--line)}
     .navin{height:56px;display:flex;align-items:center;gap:20px}
@@ -110,6 +143,15 @@
       font-weight:700;font-size:.8125rem;padding:7px 16px;border-radius:0 var(--r) var(--r) 0;cursor:pointer;
       box-shadow:0 8px 24px -12px rgba(231,200,119,.55)}
     .navsearch button:hover{filter:brightness(1.06)}
+
+    /* theme switch — segmented Auto / Dark / Light */
+    .themetoggle{display:inline-flex;flex:none;margin-left:12px;border:1px solid var(--line);
+      border-radius:var(--r);overflow:hidden}
+    .themetoggle button{background:none;border:0;border-left:1px solid var(--line);
+      color:var(--muted);font:inherit;font-size:.6875rem;padding:5px 9px;cursor:pointer;line-height:1}
+    .themetoggle button:first-child{border-left:0}
+    .themetoggle button:hover{color:var(--ink)}
+    .themetoggle button[aria-pressed="true"]{background:var(--inset);color:var(--ink);font-weight:600}
 
     /* app shell: global sidebar + content */
     .shell{display:grid;grid-template-columns:190px minmax(0,1fr);gap:22px;align-items:start}
@@ -144,7 +186,7 @@
     .panel{background:var(--glass-bg);backdrop-filter:blur(12px) saturate(140%);
       -webkit-backdrop-filter:blur(12px) saturate(140%);
       border:1px solid var(--line);border-radius:var(--r-lg);
-      box-shadow:0 20px 60px -34px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.05);
+      box-shadow:var(--panel-shadow);
       padding:15px 17px;min-width:0}
     .panelgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}
     .phead{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
@@ -230,6 +272,11 @@
              value="{{ request.args.get('query', '') if request.path == '/q' else '' }}">
       <button type="submit">Query</button>
     </form>
+    <div class="themetoggle" role="group" aria-label="Colour theme">
+      <button type="button" data-theme-set="auto" aria-pressed="true">Auto</button>
+      <button type="button" data-theme-set="dark" aria-pressed="false">Dark</button>
+      <button type="button" data-theme-set="light" aria-pressed="false">Light</button>
+    </div>
   </div></nav>
   <div class="wrap shell">
     <aside class="sidenav" aria-label="Site navigation">
@@ -262,5 +309,36 @@
     <span>NextHop Lab · <a href="/about">About &amp; data</a></span>
     <span>Data: RIPE RIS &amp; RIPEstat · RouteViews · NLNOG Ring · Globalping · Cloudflare Radar (CC BY-NC 4.0) · IODA &amp; GRIP (Georgia Tech) · bgp.tools · PeeringDB</span>
   </div></footer>
+  <script>
+    /* Theme switch wiring. The <head> script already set data-theme for the
+       first paint; here we sync the control and handle changes. Maps listen
+       for 'rl:themechange' to swap their basemap. */
+    (function () {
+      var KEY = 'rl-theme';
+      var mq = window.matchMedia('(prefers-color-scheme: light)');
+      var buttons = document.querySelectorAll('.themetoggle button');
+      var pref;
+      try { pref = localStorage.getItem(KEY) || 'auto'; } catch (e) { pref = 'auto'; }
+
+      function reflect() {
+        buttons.forEach(function (b) {
+          b.setAttribute('aria-pressed', String(b.dataset.themeSet === pref));
+        });
+      }
+      function apply(p) {
+        pref = p;
+        try { localStorage.setItem(KEY, p); } catch (e) {}
+        var t = p === 'auto' ? (mq.matches ? 'light' : 'dark') : p;
+        document.documentElement.setAttribute('data-theme', t);
+        reflect();
+        window.dispatchEvent(new CustomEvent('rl:themechange', { detail: { theme: t } }));
+      }
+      buttons.forEach(function (b) {
+        b.addEventListener('click', function () { apply(b.dataset.themeSet); });
+      });
+      mq.addEventListener('change', function () { if (pref === 'auto') apply('auto'); });
+      reflect();
+    })();
+  </script>
 </body>
 </html>
