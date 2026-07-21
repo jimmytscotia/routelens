@@ -39,7 +39,7 @@
       color-scheme:dark;
       /* ink — near-black, cool-tinted (Torc-family) */
       --bg:#070B14; --surface:#0d1526; --surface2:#0a1120; --inset:#111a2e;
-      --line:rgba(255,255,255,.09); --line-strong:rgba(255,255,255,.17);
+      --line:rgba(255,255,255,.12); --line-strong:rgba(255,255,255,.2);
       --ink:#F4F6FB; --muted:#A7B4CC; --faint:#74839E;
       /* cool light — data/telemetry accent */
       --accent:#3B6EF6; --accent-ink:#7FC4EE;
@@ -48,7 +48,7 @@
       /* state — meaning unchanged */
       --ok:#3fd68f; --warn:#f0c249; --crit:#ff5d6e;
       /* glass */
-      --glass-bg:rgba(255,255,255,.045); --glass-bg-strong:rgba(255,255,255,.075);
+      --glass-bg:rgba(255,255,255,.07); --glass-bg-strong:rgba(255,255,255,.1);
       --r:9px; --r-lg:16px;
       --z-nav:10; --z-tip:20;
       --font-display:'Clash Display',system-ui,sans-serif;
@@ -62,9 +62,9 @@
     /* static cool-gradient ambient (WebGL-free — a subtle version of Torc's) */
     body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
       background:
-        radial-gradient(70% 55% at 15% 4%, rgba(59,110,246,.13), transparent 60%),
-        radial-gradient(55% 48% at 94% 8%, rgba(53,208,224,.08), transparent 62%),
-        radial-gradient(75% 65% at 50% 106%, rgba(85,102,236,.10), transparent 60%),
+        radial-gradient(70% 55% at 15% 4%, rgba(59,110,246,.17), transparent 60%),
+        radial-gradient(55% 48% at 94% 8%, rgba(53,208,224,.11), transparent 62%),
+        radial-gradient(75% 65% at 50% 106%, rgba(85,102,236,.13), transparent 60%),
         var(--bg)}
     a{color:var(--accent-ink);text-decoration:none}
     a:hover{text-decoration:underline}
