@@ -66,6 +66,11 @@
         radial-gradient(55% 48% at 94% 8%, rgba(53,208,224,.11), transparent 62%),
         radial-gradient(75% 65% at 50% 106%, rgba(85,102,236,.13), transparent 60%),
         var(--bg)}
+    /* CARTO dark_nolabels is CARTO's darkest basemap — land vanishes on dim or
+       uncalibrated panels. Lift the tile pane on every Leaflet map (Pulse and
+       Weather); markers, choropleths and popups sit on other panes, untouched.
+       In light mode this filter is dropped and a light basemap is used. */
+    .leaflet-tile-pane{filter:brightness(1.55) contrast(1.08)}
     a{color:var(--accent-ink);text-decoration:none}
     a:hover{text-decoration:underline}
     ::selection{background:rgba(231,200,119,.26);color:#fff}
