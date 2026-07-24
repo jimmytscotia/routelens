@@ -55,6 +55,11 @@ def create_app(config: dict | None = None) -> Flask:
         DATABASE=os.environ.get("ROUTELENS_DATABASE", str(Path(app.instance_path) / "routelens.db")),
         RESOLVER=_default_resolver,
         CLOUDFLARE_ANALYTICS_TOKEN=os.environ.get("CLOUDFLARE_ANALYTICS_TOKEN", ""),
+        # Primary public origin, e.g. "https://routelens.net". When set, every
+        # other hostname 301s here and all canonical/OG/sitemap URLs use it, so
+        # search engines see one site rather than two copies. Unset locally and
+        # on the dev instance, which must keep serving their own hostnames.
+        CANONICAL_ORIGIN=os.environ.get("ROUTELENS_CANONICAL_ORIGIN", "").rstrip("/"),
     )
     if config:
         app.config.update(config)
@@ -68,6 +73,35 @@ def create_app(config: dict | None = None) -> Flask:
 
     def sources() -> SourceClient:
         return app.config["ROUTELENS_SOURCES"]
+
+    def canonical_host() -> str:
+        from urllib.parse import urlsplit
+
+        return urlsplit(app.config["CANONICAL_ORIGIN"]).netloc
+
+    @app.before_request
+    def redirect_to_canonical_origin():
+        """Send every alias hostname to the primary origin with a 301."""
+        origin = app.config["CANONICAL_ORIGIN"]
+        if not origin:
+            return None
+        # Health probes hit the container directly with an internal Host, and
+        # ACME challenges must answer on whatever hostname is being validated.
+        if request.path == "/healthz" or request.path.startswith("/.well-known/"):
+            return None
+        if request.host == canonical_host():
+            return None
+        from flask import redirect
+
+        return redirect(origin + request.full_path.rstrip("?"), code=301)
+
+    @app.context_processor
+    def inject_canonical_urls():
+        origin = app.config["CANONICAL_ORIGIN"]
+        return {
+            "canonical_url": (origin + request.path) if origin else request.base_url,
+            "canonical_origin": origin or request.url_root.rstrip("/"),
+        }
 
     @app.get("/about")
     def about():
@@ -93,7 +127,7 @@ def create_app(config: dict | None = None) -> Flask:
     def sitemap_xml():
         from flask import Response
 
-        root = request.url_root.rstrip("/")
+        root = app.config["CANONICAL_ORIGIN"] or request.url_root.rstrip("/")
         urls = "".join(f"  <url><loc>{root}{p}</loc></url>\n" for p in SITEMAP_PATHS)
         body = (
             '<?xml version="1.0" encoding="UTF-8"?>\n'
