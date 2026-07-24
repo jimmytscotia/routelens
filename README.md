@@ -59,7 +59,7 @@ Expected current test result at handoff:
 ## Health check
 
 ```bash
-curl -fsS https://routelens.nexthop.engineer/healthz
+curl -fsS https://routelens.net/healthz
 ```
 
 Expected:

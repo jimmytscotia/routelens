@@ -186,7 +186,9 @@ page and "United Kingdom" sidebar category were removed):
 
 ## Publishing status
 
-RouteLens is live and public at https://routelens.nexthop.engineer
+RouteLens is live and public at https://routelens.net (primary since
+2026-07-24; the old routelens.nexthop.engineer 301s here — set
+`ROUTELENS_CANONICAL_ORIGIN` to change the canonical origin)
 (since 2026-07-15). Now that the audience is public:
 
 - Mind upstream API rate limits (RIPEstat, RouteViews, bgp.tools, PeeringDB,

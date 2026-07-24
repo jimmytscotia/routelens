@@ -117,10 +117,12 @@ def create_app(config: dict | None = None) -> Flask:
 
     @app.get("/robots.txt")
     def robots_txt():
-        from flask import Response, url_for
+        from flask import Response
 
-        sitemap = url_for("sitemap_xml", _external=True)
-        body = f"User-agent: *\nAllow: /\nSitemap: {sitemap}\n"
+        # Not url_for(_external=True): TLS terminates at the proxy, so the
+        # request scheme is http and that would advertise an http:// sitemap.
+        root = app.config["CANONICAL_ORIGIN"] or request.url_root.rstrip("/")
+        body = f"User-agent: *\nAllow: /\nSitemap: {root}/sitemap.xml\n"
         return Response(body, mimetype="text/plain")
 
     @app.get("/sitemap.xml")

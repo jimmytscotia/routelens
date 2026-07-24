@@ -135,3 +135,14 @@ def test_sitemap_uses_canonical_origin(tmp_path):
 
     assert "<loc>https://routelens.net/</loc>" in body
     assert "nexthop.engineer" not in body
+
+
+def test_robots_sitemap_url_uses_canonical_origin(tmp_path):
+    """Behind a TLS-terminating proxy the request scheme is http, so the
+    sitemap URL must come from the canonical origin, not the request."""
+    client = _client(tmp_path, CANON)
+
+    body = client.get("/robots.txt", headers={"Host": "routelens.net"}).data.decode()
+
+    assert "Sitemap: https://routelens.net/sitemap.xml" in body
+    assert "http://" not in body
