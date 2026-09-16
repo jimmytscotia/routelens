@@ -1,4 +1,4 @@
-# CLAUDE.md — RouteLens project handoff
+# AGENTS.md — RouteLens project handoff
 
 You are developing **RouteLens**, a NextHop Lab network observability demo app.
 
@@ -95,10 +95,6 @@ RouteLens pivoted from a static lab status page to a live "routing observatory":
 - Design register: **utilitarian** (bgp.tools-style density, no glow). See
   PRODUCT.md before doing UI work. Design tokens live in base.html.
 - `CLOUDFLARE_RADAR_TOKEN` env var enables the Radar panel (degrades gracefully).
-- `CARTO_BASEMAP_KEY` env var keys the Leaflet basemap on Pulse + Weather.
-  CARTO began watermarking keyless tiles ("API KEY REQUIRED") in 2026; the key
-  is public/browser-visible by design — restrict it to the domain, don't treat
-  it as a secret. Unset = watermarked tiles, no crash.
 
 ## Approved dashboard roadmap (build one at a time, in order)
 

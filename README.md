@@ -42,6 +42,15 @@ Open:
 http://127.0.0.1:8097/
 ```
 
+### Optional environment variables
+
+| Variable | Effect when unset |
+|---|---|
+| `CARTO_BASEMAP_KEY` | Map tiles are watermarked "API KEY REQUIRED" — CARTO began requiring a key for their basemaps in 2026. A free key (5M tiles/month) comes from <https://carto.com/basemaps/apikey>; it is public and browser-visible by design, so restrict it to your own domain rather than treating it as a secret. |
+| `CLOUDFLARE_RADAR_TOKEN` | Cloudflare Radar panels are hidden. |
+| `MISTRAL_API_KEY` | Internet Weather briefings are not generated. |
+| `ROUTELENS_CANONICAL_ORIGIN` | No canonical-host redirect; the app serves whatever hostname it receives. |
+
 ## Smoke tests
 
 ```bash

@@ -60,6 +60,10 @@ def create_app(config: dict | None = None) -> Flask:
         # search engines see one site rather than two copies. Unset locally and
         # on the dev instance, which must keep serving their own hostnames.
         CANONICAL_ORIGIN=os.environ.get("ROUTELENS_CANONICAL_ORIGIN", "").rstrip("/"),
+        # CARTO put their raster basemaps behind an API key in 2026; without one
+        # every tile comes back stamped "API KEY REQUIRED". This is a public,
+        # domain-restricted key (it has to reach the browser), not a secret.
+        CARTO_BASEMAP_KEY=os.environ.get("CARTO_BASEMAP_KEY", ""),
     )
     if config:
         app.config.update(config)
@@ -94,6 +98,12 @@ def create_app(config: dict | None = None) -> Flask:
         from flask import redirect
 
         return redirect(origin + request.full_path.rstrip("?"), code=301)
+
+    @app.context_processor
+    def inject_basemap_key():
+        # Rendered into the tile URL as "?key=..."; empty means send no
+        # parameter at all, since CARTO rejects a blank key outright.
+        return {"carto_basemap_key": app.config["CARTO_BASEMAP_KEY"]}
 
     @app.context_processor
     def inject_canonical_urls():

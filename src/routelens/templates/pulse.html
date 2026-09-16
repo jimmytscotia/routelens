@@ -159,6 +159,9 @@
   const $ = id => document.getElementById(id);
 
   // ---- map ------------------------------------------------------------------
+  // CARTO watermarks keyless tiles ("API KEY REQUIRED"); empty key => no param.
+  {%- set carto_qs = ('?key=' ~ carto_basemap_key|urlencode) if carto_basemap_key else '' %}
+  const CARTO_KEY = {{ carto_qs|tojson }};
   let map = null, world = null, centroids = {}, tiles = null;
   const layers = {collectors: null, churn: null, events: null};
   let activeLayer = 'collectors';
@@ -166,7 +169,7 @@
   function addBasemap() {
     if (tiles) map.removeLayer(tiles);
     const style = isLight() ? 'light_nolabels' : 'dark_nolabels';
-    tiles = L.tileLayer(`https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}@2x.png`, {
+    tiles = L.tileLayer(`https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}@2x.png${CARTO_KEY}`, {
       subdomains: 'abcd', tileSize: 256,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
     }).addTo(map);
