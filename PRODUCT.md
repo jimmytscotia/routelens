@@ -9,7 +9,7 @@ telemetry. The instrument stays dense; the framing is refined.
 
 ## Users
 
-A technical audience — network engineers, NOC and infrastructure people, researchers, and the professionally curious — interested in investigating the live status of core parts of the Internet: global BGP activity, routing stability, RPKI posture, exchange points, and the health of specific prefixes, ASNs, and hostnames. They judge in the first thirty seconds: is this a real operator's tool or a toy demo? Secondary: the admin, using it as a genuine looking-glass.
+A technical audience — network engineers, NOC and infrastructure people, researchers, and the professionally curious — interested in investigating the live status of core parts of the Internet: global BGP activity, routing stability, RPKI posture, exchange points, and the health of specific prefixes, ASNs, and hostnames. They judge in the first thirty seconds: is this a real operator's tool or a toy demo? Secondary: the maintainer, using it as a genuine looking-glass.
 
 ## Product Purpose
 

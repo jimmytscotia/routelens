@@ -158,7 +158,7 @@ def create_app(config: dict | None = None) -> Flask:
 
         return jsonify({"collectors": ACTIVE_COLLECTORS})
 
-    # Watchlist UI removed for now (2026-07-14, the admin's call). The collector,
+    # Watchlist UI removed for now (2026-07-14). The collector,
     # store and resource-detail pages stay; only the listing page is gone.
     @app.get("/resources/<int:resource_id>")
     def resource_detail(resource_id: int):

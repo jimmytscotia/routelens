@@ -93,21 +93,20 @@ Expected:
 
 ## Current gaps / next development targets
 
-1. ~~MacBook/client DNS ergonomics~~ — resolved by the 2026-07-15 VPS cutover.
-2. Add BGP path visualisation on prefix detail pages.
-3. Add DNS public/private comparison panels.
-4. Add a safe “run checks now” UI button or authenticated admin route.
-5. ~~Deployment automation to svc-01~~ — obsolete; Coolify push-to-deploy replaced it.
-6. Polish responsive UI and take product screenshots.
-7. Add GitHub Actions CI (repo is on GitHub; run `pytest` on PRs before merge to `dev`/`main`).
+1. Add BGP path visualisation on prefix detail pages.
+2. Add DNS public/private comparison panels.
+3. Add a safe “run checks now” UI button or authenticated admin route.
+4. Polish responsive UI and take product screenshots.
+5. Add CI to run `pytest` on pull requests before merge.
 
 ## Guardrails
 
-- Do not commit secrets or real `.env` files.
-- Do not touch Karen tenancy.
-- Do not modify Proxmox host/VM infrastructure unless the admin explicitly asks.
-- RouteLens can safely read public APIs and lab service endpoints.
-- Keep `nexthop.engineer` public apex pointing at `66.241.124.199`.
+- Do not commit secrets, tokens, real `.env` files, private keys or database files.
+- Do not rename the Dockerfile targets (`web`, `aggregator`) or the gunicorn
+  entrypoint (`routelens.app:create_app()`) — deployments build from this repo.
+- Be a good citizen of the upstream APIs: cache responses, poll politely, and
+  keep the attribution that Cloudflare Radar (CC BY-NC) and the academic
+  services (IODA, GRIP) require.
 
 ## License
 

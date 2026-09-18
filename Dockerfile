@@ -1,7 +1,7 @@
-# RouteLens — built by Coolify on vps-01 (dockerfile buildpack).
+# RouteLens — multi-target image.
 # Two targets from one image:
-#   web        -> gunicorn dashboard (Coolify target: web)
-#   aggregator -> RIS Live websocket aggregator (Coolify target: aggregator)
+#   web        -> gunicorn dashboard
+#   aggregator -> RIS Live websocket aggregator
 # The repo has no [build-system], so `uv sync` installs deps only; the package
 # itself runs via PYTHONPATH=/app/src (same quirk as local dev).
 FROM python:3.12-slim AS base
