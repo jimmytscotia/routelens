@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import os
 import socket
 import ssl
 from urllib.parse import urlparse
@@ -27,12 +28,17 @@ def dns_check(
     hostname: str,
     expected_mode: str,
     public_resolver: str = "1.1.1.1",
-    private_resolver: str = "100.88.168.126",
+    private_resolver: str | None = None,
     expected_ips: list[str] | None = None,
     resolver=resolve_a,
 ) -> dict:
+    # Split-horizon checks need a resolver that can see the private view;
+    # which one that is belongs to the deployment, not to this code. Without
+    # one we simply report the public view.
+    if private_resolver is None:
+        private_resolver = os.environ.get("ROUTELENS_PRIVATE_RESOLVER") or None
     public_ips = resolver(public_resolver, hostname)
-    private_ips = resolver(private_resolver, hostname)
+    private_ips = resolver(private_resolver, hostname) if private_resolver else []
     insight = classify_dns_visibility(hostname, expected_mode, public_ips, private_ips, expected_ips)
     return {
         "check_type": "dns",

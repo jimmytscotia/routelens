@@ -25,9 +25,17 @@ GRIP_BASE = "https://api.grip.inetintel.cc.gatech.edu/v1"
 GLOBALPING_BASE = "https://api.globalping.io/v1"
 RADAR_BASE = "https://api.cloudflare.com/client/v4/radar"
 
-# Polite User-Agent for bulk/courtesy data sources (bgp.tools requires a
-# reachable contact). The mailbox is monitored by the admin.
-USER_AGENT = "RouteLens/1.0 (https://routelens.nexthop.engineer; noc.nexthop@agentmail.to)"
+# Polite User-Agent for bulk/courtesy data sources. bgp.tools and others ask
+# for a reachable contact, so a public deployment should set ROUTELENS_USER_AGENT
+# to one its own operator monitors.
+DEFAULT_USER_AGENT = "RouteLens/1.0 (+https://github.com/jimmytscotia/routelens)"
+
+
+def build_user_agent() -> str:
+    return os.environ.get("ROUTELENS_USER_AGENT") or DEFAULT_USER_AGENT
+
+
+USER_AGENT = build_user_agent()
 
 
 def _utf16_json(response) -> Any:

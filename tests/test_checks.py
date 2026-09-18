@@ -6,11 +6,11 @@ def test_dns_check_compares_public_and_private_answers_with_injected_resolvers()
         if server == "public":
             return []
         if server == "private":
-            return ["100.94.135.62"]
+            return ["192.0.2.20"]
         raise AssertionError(server)
 
     result = dns_check(
-        hostname="web.nexthop.engineer",
+        hostname="web.internal.example",
         expected_mode="private_lab",
         public_resolver="public",
         private_resolver="private",
@@ -19,4 +19,4 @@ def test_dns_check_compares_public_and_private_answers_with_injected_resolvers()
 
     assert result["status"] == "healthy"
     assert result["details"]["public_ips"] == []
-    assert result["details"]["private_ips"] == ["100.94.135.62"]
+    assert result["details"]["private_ips"] == ["192.0.2.20"]

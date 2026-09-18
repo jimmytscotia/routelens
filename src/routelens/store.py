@@ -130,35 +130,12 @@ CREATE TABLE IF NOT EXISTS ris_prefix_activity (
 """
 
 
+# Seeded into an empty database as worked examples. Deliberately neutral: two
+# well-known public prefixes anyone can watch, and nothing belonging to whoever
+# happens to run this instance. Add your own estate with upsert_resource() —
+# seeding only ever inserts or updates by name, so your rows survive upgrades
+# that change this list.
 DEFAULT_RESOURCES = [
-    {
-        "name": "nexthop.engineer",
-        "resource_type": "hostname",
-        "expected_mode": "public",
-        "expected_ips": ["66.241.124.199"],
-        "expected_url": "https://nexthop.engineer/",
-    },
-    {
-        "name": "web.nexthop.engineer",
-        "resource_type": "hostname",
-        "expected_mode": "private_lab",
-        "expected_ips": ["100.94.135.62"],
-        "expected_url": "https://web.nexthop.engineer/",
-    },
-    {
-        "name": "grafana.nexthop.engineer",
-        "resource_type": "hostname",
-        "expected_mode": "private_lab",
-        "expected_ips": ["100.94.135.62"],
-        "expected_url": "https://grafana.nexthop.engineer/",
-    },
-    {
-        "name": "prometheus.nexthop.engineer",
-        "resource_type": "hostname",
-        "expected_mode": "private_lab",
-        "expected_ips": ["100.94.135.62"],
-        "expected_url": "https://prometheus.nexthop.engineer/",
-    },
     {"name": "8.8.8.0/24", "resource_type": "prefix", "expected_mode": "bgp_public", "expected_origin_asn": 15169},
     {"name": "1.1.1.0/24", "resource_type": "prefix", "expected_mode": "bgp_public", "expected_origin_asn": 13335},
 ]

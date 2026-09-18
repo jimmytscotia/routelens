@@ -21,29 +21,41 @@ def test_database_path_can_come_from_environment(tmp_path, monkeypatch):
     assert db_path.exists()
 
 
-def test_resource_detail_renders_latest_telemetry(tmp_path):
-    app = create_app({"DATABASE": str(tmp_path / "test.db"), "TESTING": True})
+def _private_host(app, name="grafana.internal.example"):
+    """An operator's own resource, of the kind seeding no longer provides."""
     store = app.config["ROUTELENS_STORE"]
-    resource = next(item for item in store.list_resources() if item["name"] == "web.nexthop.engineer")
+    resource_id = store.upsert_resource(
+        name=name, resource_type="hostname", expected_mode="private_lab",
+        expected_ips=["192.0.2.20"],
+    )
+    return store.get_resource(resource_id)
+
+
+def test_resource_detail_renders_latest_telemetry(tmp_path):
+    app = create_app({"DATABASE": str(tmp_path / "test.db"), "TESTING": True,
+                      "PUBLIC_RESOURCE_PAGES": True})
+    store = app.config["ROUTELENS_STORE"]
+    resource = _private_host(app)
     store.record_check(
         resource_id=resource["id"],
         check_type="dns",
         status="healthy",
         summary="private DNS is present and public DNS is absent",
-        details={"public_answers": [], "private_answers": ["100.94.135.62"]},
+        details={"public_answers": [], "private_answers": ["192.0.2.20"]},
     )
     client = app.test_client()
 
     response = client.get(f"/resources/{resource['id']}")
 
     assert response.status_code == 200
-    assert b"web.nexthop.engineer" in response.data
+    assert b"grafana.internal.example" in response.data
     assert b"private DNS is present" in response.data
-    assert b"100.94.135.62" in response.data
+    assert b"192.0.2.20" in response.data
 
 
 def test_prefix_detail_renders_bgp_path_visualisation(tmp_path):
-    app = create_app({"DATABASE": str(tmp_path / "test.db"), "TESTING": True})
+    app = create_app({"DATABASE": str(tmp_path / "test.db"), "TESTING": True,
+                      "PUBLIC_RESOURCE_PAGES": True})
     store = app.config["ROUTELENS_STORE"]
     resource = next(item for item in store.list_resources() if item["name"] == "8.8.8.0/24")
     store.record_check(
@@ -81,15 +93,16 @@ def test_prefix_detail_renders_bgp_path_visualisation(tmp_path):
 
 
 def test_non_prefix_detail_omits_bgp_path_visualisation(tmp_path):
-    app = create_app({"DATABASE": str(tmp_path / "test.db"), "TESTING": True})
+    app = create_app({"DATABASE": str(tmp_path / "test.db"), "TESTING": True,
+                      "PUBLIC_RESOURCE_PAGES": True})
     store = app.config["ROUTELENS_STORE"]
-    resource = next(item for item in store.list_resources() if item["name"] == "web.nexthop.engineer")
+    resource = _private_host(app)
     store.record_check(
         resource_id=resource["id"],
         check_type="dns",
         status="healthy",
         summary="private DNS is present and public DNS is absent",
-        details={"private_answers": ["100.94.135.62"]},
+        details={"private_answers": ["192.0.2.20"]},
     )
     client = app.test_client()
 

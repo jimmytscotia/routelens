@@ -16,6 +16,15 @@ def url_for_hostname(hostname: str) -> str:
     return f"https://{hostname}/"
 
 
+def http_url_for_resource(resource: dict) -> str:
+    """Where to send the HTTP check.
+
+    Services expose health at their own paths (``/-/ready``, ``/api/health``),
+    so that path is stored per resource rather than hard-coded here.
+    """
+    return resource.get("expected_url") or url_for_hostname(resource["name"])
+
+
 def run_resource_checks(store: RouteLensStore, resource: dict) -> list[dict]:
     results = []
     expected_ips = resource.get("expected_ips") or []
@@ -24,14 +33,7 @@ def run_resource_checks(store: RouteLensStore, resource: dict) -> list[dict]:
         if check == "dns":
             result = dns_check(resource["name"], resource["expected_mode"], expected_ips=expected_ips)
         elif check == "http":
-            url = resource.get("expected_url") or url_for_hostname(resource["name"])
-            if resource["name"] == "prometheus.nexthop.engineer":
-                url = "https://prometheus.nexthop.engineer/-/ready"
-            elif resource["name"] == "grafana.nexthop.engineer":
-                url = "https://grafana.nexthop.engineer/api/health"
-            elif resource["name"] == "web.nexthop.engineer":
-                url = "https://web.nexthop.engineer/healthz"
-            result = http_check(url, connect_host=connect_host)
+            result = http_check(http_url_for_resource(resource), connect_host=connect_host)
         elif check == "tls":
             result = tls_check(resource["name"], connect_host=connect_host)
         elif check == "bgp":

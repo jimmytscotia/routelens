@@ -121,7 +121,7 @@ def test_source_error_is_reported_not_raised(store, monkeypatch):
 
 def test_globalping_create_and_result(store, monkeypatch):
     def fake_post(url, **kwargs):
-        assert kwargs["json"]["target"] == "nexthop.engineer"
+        assert kwargs["json"]["target"] == "example.com"
         return FakeResponse({"id": "meas123", "probesCount": 3}, status=202)
 
     result_payload = {
@@ -138,7 +138,7 @@ def test_globalping_create_and_result(store, monkeypatch):
     monkeypatch.setattr(sources.requests, "get", lambda url, **kw: FakeResponse(result_payload))
     client = SourceClient(store)
 
-    created = client.globalping_create("nexthop.engineer")
+    created = client.globalping_create("example.com")
     assert created["ok"] is True
     assert created["data"]["id"] == "meas123"
 

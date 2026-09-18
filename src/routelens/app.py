@@ -64,6 +64,11 @@ def create_app(config: dict | None = None) -> Flask:
         # every tile comes back stamped "API KEY REQUIRED". This is a public,
         # domain-restricted key (it has to reach the browser), not a secret.
         CARTO_BASEMAP_KEY=os.environ.get("CARTO_BASEMAP_KEY", ""),
+        # Resource detail pages show what an operator monitors — internal
+        # hostnames, private-range answers, which services they run. Off by
+        # default so a public deployment discloses none of that; the data and
+        # the checks behind it are unaffected.
+        PUBLIC_RESOURCE_PAGES=os.environ.get("ROUTELENS_PUBLIC_RESOURCE_PAGES", "") == "1",
     )
     if config:
         app.config.update(config)
@@ -162,6 +167,8 @@ def create_app(config: dict | None = None) -> Flask:
     # store and resource-detail pages stay; only the listing page is gone.
     @app.get("/resources/<int:resource_id>")
     def resource_detail(resource_id: int):
+        if not app.config["PUBLIC_RESOURCE_PAGES"]:
+            abort(404)
         resource = store.get_resource(resource_id)
         if not resource:
             abort(404)

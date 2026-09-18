@@ -2,7 +2,7 @@ from routelens.collector import checks_for_resource
 
 
 def test_checks_for_private_hostname_includes_dns_http_tls():
-    resource = {"name": "web.nexthop.engineer", "resource_type": "hostname", "expected_mode": "private_lab", "expected_public_ip": None}
+    resource = {"name": "web.internal.example", "resource_type": "hostname", "expected_mode": "private_lab", "expected_public_ip": None}
 
     checks = checks_for_resource(resource)
 

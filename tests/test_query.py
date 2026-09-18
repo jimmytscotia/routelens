@@ -13,8 +13,8 @@ from routelens.query import classify_query
         ("AS15169", "asn", 15169),
         ("as13335", "asn", 13335),
         ("15169", "asn", 15169),
-        ("nexthop.engineer", "hostname", "nexthop.engineer"),
-        ("Grafana.NextHop.Engineer", "hostname", "grafana.nexthop.engineer"),
+        ("example.com", "hostname", "example.com"),
+        ("Grafana.Internal.Example", "hostname", "grafana.internal.example"),
         ("  8.8.8.0/24  ", "prefix", "8.8.8.0/24"),
     ],
 )

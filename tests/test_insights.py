@@ -3,10 +3,10 @@ from routelens.insights import classify_dns_visibility, score_prefix_health
 
 def test_lab_only_service_is_healthy_when_public_dns_absent_and_private_dns_present():
     result = classify_dns_visibility(
-        hostname="web.nexthop.engineer",
+        hostname="web.internal.example",
         expected_mode="private_lab",
         public_ips=[],
-        private_ips=["100.94.135.62"],
+        private_ips=["192.0.2.20"],
     )
 
     assert result["status"] == "healthy"
@@ -16,10 +16,10 @@ def test_lab_only_service_is_healthy_when_public_dns_absent_and_private_dns_pres
 
 def test_lab_only_service_is_critical_when_public_dns_leaks_private_service():
     result = classify_dns_visibility(
-        hostname="grafana.nexthop.engineer",
+        hostname="grafana.internal.example",
         expected_mode="private_lab",
-        public_ips=["100.94.135.62"],
-        private_ips=["100.94.135.62"],
+        public_ips=["192.0.2.20"],
+        private_ips=["192.0.2.20"],
     )
 
     assert result["status"] == "critical"
@@ -29,11 +29,11 @@ def test_lab_only_service_is_critical_when_public_dns_leaks_private_service():
 
 def test_public_site_is_healthy_when_public_and_private_dns_match_expected_public_ip():
     result = classify_dns_visibility(
-        hostname="nexthop.engineer",
+        hostname="example.com",
         expected_mode="public",
-        public_ips=["66.241.124.199"],
-        private_ips=["66.241.124.199"],
-        expected_ips=["66.241.124.199"],
+        public_ips=["198.51.100.10"],
+        private_ips=["198.51.100.10"],
+        expected_ips=["198.51.100.10"],
     )
 
     assert result["status"] == "healthy"
